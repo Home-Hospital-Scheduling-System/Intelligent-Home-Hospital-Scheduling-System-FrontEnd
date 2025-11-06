@@ -44,7 +44,7 @@ export default function CoordinatorSchedules() {
   }, [])
 
   if (loading) return <p>Loading upcoming visits...</p>
-  if (error) return <p style={{ color: 'crimson' }}>Error: {error}</p>
+  if (error) return <p className="muted" style={{ color: 'crimson' }}>Error: {error}</p>
 
   // Show only future or ongoing visits
   const now = new Date()
@@ -53,30 +53,33 @@ export default function CoordinatorSchedules() {
   if (!upcoming.length) return <p>No upcoming visits found.</p>
 
   return (
-    <div style={{ marginTop: 20 }}>
+    <div className="schedules-section">
       <h2>Coordinator — Upcoming Visits</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table className="schedules-table">
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Time</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Patient</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Professional ID</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Location</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Notes</th>
+            <th>Time</th>
+            <th>Patient</th>
+            <th>Professional</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th>Notes</th>
           </tr>
         </thead>
         <tbody>
           {upcoming.map(s => (
             <tr key={s.id}>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                {new Date(s.start_time).toLocaleString()} - {new Date(s.end_time).toLocaleTimeString()}
+              <td className="time-cell">
+                {new Date(s.start_time).toLocaleString()}<br/>
+                <small className="muted">{new Date(s.end_time).toLocaleTimeString()}</small>
               </td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{patients[s.patient_id] || `#${s.patient_id}`}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{s.professional_id ? `#${s.professional_id}` : 'Unassigned'}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{locations[s.location_id] || `#${s.location_id}`}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{s.status}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{s.notes || ''}</td>
+              <td>{patients[s.patient_id] || `#${s.patient_id}`}</td>
+              <td>{s.professional_id ? `#${s.professional_id}` : 'Unassigned'}</td>
+              <td>{locations[s.location_id] || `#${s.location_id}`}</td>
+              <td>
+                <span className={`status-chip ${'status-' + (s.status || 'scheduled')}`}>{s.status}</span>
+              </td>
+              <td>{s.notes || ''}</td>
             </tr>
           ))}
         </tbody>
