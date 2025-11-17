@@ -2,6 +2,15 @@
 
 This folder contains a minimal Vite + React scaffold for the Thesis project landing page.
 
+Live demo
+-------
+
+You can view the deployed frontend at:
+
+https://home-hospital-scheduling-system.netlify.app/
+
+(Note: this is a public deployment of the current frontend; it reads from the Supabase project configured by the environment variables.)
+
 # AI Powered Home Hospital Scheduling System — Frontend (Vite + React)
 
 This folder contains a minimal Vite + React scaffold for the Thesis project landing page. It is prepared to connect to Supabase.
