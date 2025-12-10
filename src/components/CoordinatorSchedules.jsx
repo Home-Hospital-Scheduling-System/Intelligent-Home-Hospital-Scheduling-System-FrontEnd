@@ -15,7 +15,18 @@ export default function CoordinatorSchedules() {
       try {
         const [{ data: schedulesData, error: sErr }, { data: patientsData, error: pErr }, { data: locationsData, error: lErr }] = await Promise.all([
           supabase.from('schedules').select('*').order('start_time', { ascending: true }),
-          supabase.from('patients').select('id, name'),
+          supabase.from('patients').select('id, profile_id, address').then(async res => {
+            if (res.data) {
+              // Fetch profile names for patients
+              const profileIds = res.data.map(p => p.profile_id)
+              const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', profileIds)
+              res.data = res.data.map(p => ({
+                ...p,
+                name: profiles?.find(pr => pr.id === p.profile_id)?.full_name || 'Unknown'
+              }))
+            }
+            return res
+          }),
           supabase.from('locations').select('id, name')
         ])
 
