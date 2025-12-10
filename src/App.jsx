@@ -3,6 +3,7 @@ import { supabase } from './lib/supabaseClient'
 import Auth from './components/Auth'
 import CoordinatorSchedules from './components/CoordinatorSchedules'
 import PatientView from './components/PatientView'
+import ProfessionalView from './components/ProfessionalView'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -34,12 +35,30 @@ export default function App() {
           const pendingRaw = localStorage.getItem('hhss_pending_profile_' + (user.email || ''))
           if (pendingRaw) {
             const pending = JSON.parse(pendingRaw)
-            const profile = { id: user.id, full_name: pending.fullName, phone: pending.phone, role: pending.role }
+            const profile = { id: user.id, full_name: pending.fullName, email: user.email, phone: pending.phone || null, role: pending.role }
             const { error: pErr } = await supabase.from('profiles').insert(profile)
             if (!pErr) {
               // create patient row when role=patient
               if (pending.role === 'patient') {
-                await supabase.from('patients').insert({ profile_id: user.id, name: pending.fullName, phone: pending.phone })
+                const patientData = { profile_id: user.id, address: pending.address || null, medical_notes: '' }
+                console.log('Inserting pending patient:', patientData)
+                const { error: patErr, data: patData } = await supabase.from('patients').insert(patientData)
+                if (patErr) {
+                  console.warn('Pending patient insert error:', patErr.message)
+                } else {
+                  console.log('Pending patient inserted successfully:', patData)
+                }
+              }
+              // create professional row when role=professional
+              if (pending.role === 'professional') {
+                const professionalData = { profile_id: user.id, kind: pending.professionalKind || 'nurse', specialty: pending.specialty || '', license_number: pending.licenseNumber || null }
+                console.log('Inserting pending professional:', professionalData)
+                const { error: proErr, data: proData } = await supabase.from('professionals').insert(professionalData)
+                if (proErr) {
+                  console.warn('Pending professional insert error:', proErr.message)
+                } else {
+                  console.log('Pending professional inserted successfully:', proData)
+                }
               }
               localStorage.removeItem('hhss_pending_profile_' + (user.email || ''))
               setProfile(profile)
@@ -61,9 +80,10 @@ export default function App() {
   async function handleSignOut() {
     try {
       await supabase.auth.signOut()
+      setSession(null)
+      setProfile(null)
     } catch (e) {
       console.warn('sign out error', e)
-    } finally {
       setSession(null)
       setProfile(null)
     }
@@ -100,7 +120,14 @@ export default function App() {
           </>
         )}
 
-        {session && profile && ['professional','supervisor'].includes(profile.role) && (
+        {session && profile && profile.role === 'professional' && (
+          <>
+            <p className="lead">Professional dashboard</p>
+            <ProfessionalView profile={profile} />
+          </>
+        )}
+
+        {session && profile && profile.role === 'supervisor' && (
           <>
             <p className="lead">Sample page for {profile.role} — we'll add a dedicated view later.</p>
             <CoordinatorSchedules />
