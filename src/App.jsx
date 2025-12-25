@@ -4,6 +4,7 @@ import Auth from './components/Auth'
 import CoordinatorSchedules from './components/CoordinatorSchedules'
 import PatientView from './components/PatientView'
 import ProfessionalView from './components/ProfessionalView'
+import SupervisorDashboard from './components/SupervisorDashboard'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -129,8 +130,8 @@ export default function App() {
 
         {session && profile && profile.role === 'supervisor' && (
           <>
-            <p className="lead">Sample page for {profile.role} — we'll add a dedicated view later.</p>
-            <CoordinatorSchedules />
+            <p className="lead">Manage patient assignments and work shifts.</p>
+            <SupervisorDashboard profile={profile} />
           </>
         )}
       </main>
