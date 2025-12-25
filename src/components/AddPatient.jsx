@@ -16,6 +16,68 @@ const CARE_OPTIONS = [
   'Elderly Care',
   'Diabetic Care',
   'Cardiac Care',
+  'Home Visit - General Checkup',
+  'Home Visit - Blood Pressure Monitoring',
+  'Home Visit - Wound Care',
+  'Home Visit - Medication Management',
+  'Home Visit - Post-Surgery Follow-up',
+  'Hospital at Home - Acute Care',
+  'Hospital at Home - Chronic Disease Management',
+  'Hospital at Home - Rehabilitation',
+  'Hospital at Home - Palliative Care',
+  'Hospital at Home - Post-Hospitalization Recovery',
+  'Other'
+]
+
+const AREA_OPTIONS = [
+  'Keskusta (City Center)',
+  'Karjaa',
+  'Kaituri',
+  'Kaakkuri',
+  'Kaulakeidas',
+  'Kipinä',
+  'Kontinkangas',
+  'Kontioniemi',
+  'Koskenkorva',
+  'Kuivasjärvi',
+  'Kurila',
+  'Kylmäkoski',
+  'Löytönen',
+  'Maakari',
+  'Meri-Oulu',
+  'Metso',
+  'Myllyoja',
+  'Nakkila',
+  'Nokkakivi',
+  'Oikari',
+  'Oinava',
+  'Pajuniemi',
+  'Pateniemi',
+  'Pikisaari',
+  'Pohjois-Oulu',
+  'Raksila',
+  'Rajakari',
+  'Ravantti',
+  'Rikkavesi',
+  'Rusko',
+  'Saarinen',
+  'Salmirinne',
+  'Saloinen',
+  'Sarakyla',
+  'Satakari',
+  'Semperi',
+  'Sipilä',
+  'Sulkava',
+  'Suvela',
+  'Tuira',
+  'Tuorinoja',
+  'Uimahalli',
+  'Valiokylä',
+  'Välikylä',
+  'Vapaala',
+  'Värttiö',
+  'Ylikiiminki',
+  'Zollitsch',
   'Other'
 ]
 
@@ -254,8 +316,7 @@ export default function AddPatient({ profileId, onPatientAdded }) {
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
                 Area
               </label>
-              <input
-                type="text"
+              <select
                 name="area"
                 value={formData.area}
                 onChange={handleInputChange}
@@ -265,10 +326,19 @@ export default function AddPatient({ profileId, onPatientAdded }) {
                   border: '1px solid #cbd5e1',
                   borderRadius: '6px',
                   fontSize: '1rem',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  backgroundColor: 'white',
+                  color: '#0c4a6e',
+                  cursor: 'pointer'
                 }}
-                placeholder="Enter service area"
-              />
+              >
+                <option value="">-- Select Service Area --</option>
+                {AREA_OPTIONS.map(area => (
+                  <option key={area} value={area}>
+                    {area}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
