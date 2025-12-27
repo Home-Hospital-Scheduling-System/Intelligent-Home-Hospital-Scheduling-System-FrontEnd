@@ -5,13 +5,16 @@ import UpdatePatient from './UpdatePatient'
 
 export default function ProfessionalView({ profile }) {
   const [professionalData, setProfessionalData] = useState(null)
+  const [workingHours, setWorkingHours] = useState([])
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [modalTab, setModalTab] = useState('profile') // 'profile', 'addPatient', or 'patients'
+  const [modalTab, setModalTab] = useState('profile') // 'profile', 'addPatient', 'patients', or 'schedule'
   const [patientFilter, setPatientFilter] = useState('') // filter search term
   const [selectedPatient, setSelectedPatient] = useState(null) // selected patient for full view
   const [showUpdateForm, setShowUpdateForm] = useState(false) // show update form
+
+  const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
   useEffect(() => {
     fetchProfessionalData()
@@ -34,11 +37,32 @@ export default function ProfessionalView({ profile }) {
         setProfessionalData(data)
         // Fetch patients associated with this professional
         fetchPatients(data.id)
+        // Fetch working hours
+        fetchWorkingHours(data.id)
       }
     } catch (err) {
       console.error('Unexpected error:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function fetchWorkingHours(professionalId) {
+    try {
+      const { data, error } = await supabase
+        .from('working_hours')
+        .select('*')
+        .eq('professional_id', professionalId)
+        .order('weekday', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching working hours:', error)
+        setWorkingHours([])
+      } else {
+        setWorkingHours(data || [])
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching working hours:', err)
     }
   }
 
@@ -62,6 +86,18 @@ export default function ProfessionalView({ profile }) {
 
   function handlePatientAdded(newPatient) {
     fetchPatients(professionalData?.id)
+  }
+
+  function calculateTotalHours() {
+    if (!workingHours || workingHours.length === 0) return 0
+    let total = 0
+    workingHours.forEach(w => {
+      const start = new Date(`2000-01-01 ${w.start_time}`)
+      const end = new Date(`2000-01-01 ${w.end_time}`)
+      const diff = (end - start) / (1000 * 60 * 60) // hours
+      total += diff
+    })
+    return total.toFixed(1)
   }
 
   // Filter patients based on search term
@@ -114,6 +150,140 @@ export default function ProfessionalView({ profile }) {
         </button>
       </div>
 
+      {/* Main Content - Weekly Schedule Section */}
+      <div style={{
+        padding: '2rem',
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        {/* Weekly Schedule Card */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+          padding: '2rem',
+          marginBottom: '2rem'
+        }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.5rem' }}>
+              📅 Your Weekly Schedule
+            </h2>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
+              Working hours assigned by your supervisor
+            </p>
+          </div>
+
+          {/* Total Hours Card */}
+          <div style={{
+            padding: '1.5rem',
+            backgroundColor: '#dbeafe',
+            borderRadius: '8px',
+            border: '2px solid #0ea5e9',
+            marginBottom: '1.5rem',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '0.875rem', color: '#0c4a6e', fontWeight: '500', marginBottom: '0.5rem' }}>
+              Total Weekly Hours Assigned
+            </div>
+            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#0c4a6e' }}>
+              {calculateTotalHours()} hrs
+            </div>
+          </div>
+
+          {/* Weekly Schedule Grid */}
+          {workingHours && workingHours.length === 0 ? (
+            <div style={{
+              padding: '2rem',
+              backgroundColor: '#f0f9ff',
+              borderRadius: '8px',
+              border: '1px solid #0ea5e9',
+              color: '#0c4a6e',
+              textAlign: 'center'
+            }}>
+              <p style={{ margin: 0, fontSize: '1rem' }}>No working hours assigned yet.</p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '1rem'
+            }}>
+              {workingHours.map((schedule) => (
+                <div
+                  key={schedule.id}
+                  style={{
+                    padding: '1rem',
+                    backgroundColor: '#f0f9ff',
+                    borderRadius: '8px',
+                    border: '1px solid #0ea5e9',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e0f2fe'
+                    e.currentTarget.style.borderColor = '#0284c7'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f0f9ff'
+                    e.currentTarget.style.borderColor = '#0ea5e9'
+                  }}
+                >
+                  <div style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '600',
+                    color: '#0c4a6e',
+                    marginBottom: '0.75rem'
+                  }}>
+                    {WEEKDAYS[schedule.weekday - 1]}
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gap: '0.5rem',
+                    fontSize: '0.95rem',
+                    color: '#475569'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: '#0ea5e9', fontWeight: 'bold' }}>🕐</span>
+                      {schedule.start_time} - {schedule.end_time}
+                    </div>
+
+                    {schedule.is_recurring && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        color: '#059669',
+                        fontSize: '0.875rem',
+                        marginTop: '0.25rem'
+                      }}>
+                        <span>✓</span> Recurring every week
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Duration in hours */}
+                  <div style={{
+                    marginTop: '0.75rem',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid #cbd5e1',
+                    fontSize: '0.875rem',
+                    color: '#64748b',
+                    textAlign: 'right'
+                  }}>
+                    {(() => {
+                      const start = new Date(`2000-01-01 ${schedule.start_time}`)
+                      const end = new Date(`2000-01-01 ${schedule.end_time}`)
+                      const diff = (end - start) / (1000 * 60 * 60)
+                      return `${diff.toFixed(1)} hrs`
+                    })()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <>
         {/* Profile Modal */}
         {showProfileModal && (
@@ -142,6 +312,7 @@ export default function ProfessionalView({ profile }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0, color: '#0c4a6e' }}>
                 {modalTab === 'profile' && 'Your Profile'}
+                {modalTab === 'schedule' && 'Your Weekly Schedule'}
                 {modalTab === 'addPatient' && 'Add Patient'}
                 {modalTab === 'patients' && 'Your Patients'}
               </h2>
