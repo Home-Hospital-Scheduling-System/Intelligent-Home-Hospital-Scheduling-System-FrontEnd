@@ -6,6 +6,7 @@ export default function UpdatePatient({ patient, onPatientUpdated, onClose }) {
     status: 'active',
     sessions_completed: 0,
     next_appointment_date: '',
+    next_appointment_time: '',
     treatment_notes: ''
   })
   const [loading, setLoading] = useState(false)
@@ -19,6 +20,7 @@ export default function UpdatePatient({ patient, onPatientUpdated, onClose }) {
         status: patient.status || 'active',
         sessions_completed: patient.sessions_completed || 0,
         next_appointment_date: patient.next_appointment_date ? patient.next_appointment_date.split('T')[0] : '',
+        next_appointment_time: patient.next_appointment_time || '',
         treatment_notes: patient.treatment_notes || ''
       })
     }
@@ -53,6 +55,7 @@ export default function UpdatePatient({ patient, onPatientUpdated, onClose }) {
           status: formData.status,
           sessions_completed: formData.sessions_completed,
           next_appointment_date: formData.next_appointment_date || null,
+          next_appointment_time: formData.next_appointment_time || null,
           treatment_notes: formData.treatment_notes,
           updated_at: new Date().toISOString()
         })
@@ -168,6 +171,31 @@ export default function UpdatePatient({ patient, onPatientUpdated, onClose }) {
             color: '#0c4a6e'
           }}
         />
+      </div>
+
+      {/* Next Appointment Time */}
+      <div>
+        <label style={{ display: 'block', color: '#64748b', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+          🕐 Next Appointment Time
+        </label>
+        <input
+          type="time"
+          name="next_appointment_time"
+          value={formData.next_appointment_time}
+          onChange={handleChange}
+          style={{
+            width: '100%',
+            padding: '0.75rem',
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            fontSize: '0.95rem',
+            boxSizing: 'border-box',
+            color: '#0c4a6e'
+          }}
+        />
+        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
+          Set the time for the patient's next scheduled appointment
+        </div>
       </div>
 
       {/* Treatment Notes */}

@@ -68,16 +68,25 @@ export default function ProfessionalView({ profile }) {
 
   async function fetchPatients(professionalId) {
     try {
+      // Fetch assigned patients through patient_assignments table
       const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('profile_id', profile.id)
-        .order('created_at', { ascending: false })
+        .from('patient_assignments')
+        .select('patient_id, scheduled_visit_date, scheduled_visit_time, service_area, patients(*)')
+        .eq('professional_id', professionalId)
+        .eq('status', 'active')
+        .order('scheduled_visit_date', { ascending: true })
 
       if (error) {
         console.error('Error fetching patients:', error)
       } else {
-        setPatients(data || [])
+        // Map to include assignment info
+        const patientsWithAssignmentInfo = (data || []).map(record => ({
+          ...record.patients,
+          scheduled_visit_date: record.scheduled_visit_date,
+          scheduled_visit_time: record.scheduled_visit_time,
+          service_area: record.service_area
+        }))
+        setPatients(patientsWithAssignmentInfo)
       }
     } catch (err) {
       console.error('Unexpected error fetching patients:', err)
@@ -150,10 +159,10 @@ export default function ProfessionalView({ profile }) {
         </button>
       </div>
 
-      {/* Main Content - Weekly Schedule Section */}
+      {/* Main Content - Weekly Schedule Section with Assigned Patients */}
       <div style={{
         padding: '2rem',
-        maxWidth: '1200px',
+        maxWidth: '1400px',
         margin: '0 auto'
       }}>
         {/* Weekly Schedule Card */}
@@ -166,31 +175,52 @@ export default function ProfessionalView({ profile }) {
         }}>
           <div style={{ marginBottom: '1.5rem' }}>
             <h2 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.5rem' }}>
-              📅 Your Weekly Schedule
+              📅 Your Weekly Schedule & Assigned Patients
             </h2>
             <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
-              Working hours assigned by your supervisor
+              View your shifts and the patients scheduled for each day
             </p>
           </div>
 
           {/* Total Hours Card */}
           <div style={{
-            padding: '1.5rem',
-            backgroundColor: '#dbeafe',
-            borderRadius: '8px',
-            border: '2px solid #0ea5e9',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.5rem'
           }}>
-            <div style={{ fontSize: '0.875rem', color: '#0c4a6e', fontWeight: '500', marginBottom: '0.5rem' }}>
-              Total Weekly Hours Assigned
+            <div style={{
+              padding: '1.5rem',
+              backgroundColor: '#dbeafe',
+              borderRadius: '8px',
+              border: '2px solid #0ea5e9',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '0.875rem', color: '#0c4a6e', fontWeight: '500', marginBottom: '0.5rem' }}>
+                Total Weekly Hours
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#0c4a6e' }}>
+                {calculateTotalHours()} hrs
+              </div>
             </div>
-            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#0c4a6e' }}>
-              {calculateTotalHours()} hrs
+
+            <div style={{
+              padding: '1.5rem',
+              backgroundColor: '#dcfce7',
+              borderRadius: '8px',
+              border: '2px solid #10b981',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '0.875rem', color: '#065f46', fontWeight: '500', marginBottom: '0.5rem' }}>
+                Assigned Patients
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#065f46' }}>
+                {patients.length}
+              </div>
             </div>
           </div>
 
-          {/* Weekly Schedule Grid */}
+          {/* Weekly Schedule Grid with Patients */}
           {workingHours && workingHours.length === 0 ? (
             <div style={{
               padding: '2rem',
@@ -205,80 +235,171 @@ export default function ProfessionalView({ profile }) {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '1rem'
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '1.5rem'
             }}>
-              {workingHours.map((schedule) => (
-                <div
-                  key={schedule.id}
-                  style={{
-                    padding: '1rem',
-                    backgroundColor: '#f0f9ff',
-                    borderRadius: '8px',
-                    border: '1px solid #0ea5e9',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#e0f2fe'
-                    e.currentTarget.style.borderColor = '#0284c7'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f0f9ff'
-                    e.currentTarget.style.borderColor = '#0ea5e9'
-                  }}
-                >
-                  <div style={{
-                    fontSize: '1.125rem',
-                    fontWeight: '600',
-                    color: '#0c4a6e',
-                    marginBottom: '0.75rem'
-                  }}>
-                    {WEEKDAYS[schedule.weekday - 1]}
-                  </div>
+              {workingHours.map((schedule) => {
+                // Get patients scheduled for this day of week
+                const dayOfWeek = schedule.weekday
+                const patientsForDay = patients.filter(patient => {
+                  if (!patient.scheduled_visit_date) return false
+                  const visitDate = new Date(patient.scheduled_visit_date)
+                  // Compare weekday (0=Sunday, 1=Monday, etc.)
+                  const visitDayOfWeek = visitDate.getDay() === 0 ? 7 : visitDate.getDay()
+                  return visitDayOfWeek === dayOfWeek
+                }).sort((a, b) => {
+                  // Sort by visit time
+                  return a.scheduled_visit_time?.localeCompare(b.scheduled_visit_time || '') || 0
+                })
 
-                  <div style={{
-                    display: 'grid',
-                    gap: '0.5rem',
-                    fontSize: '0.95rem',
-                    color: '#475569'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ color: '#0ea5e9', fontWeight: 'bold' }}>🕐</span>
-                      {schedule.start_time} - {schedule.end_time}
+                return (
+                  <div
+                    key={schedule.id}
+                    style={{
+                      padding: '1.5rem',
+                      backgroundColor: '#f0f9ff',
+                      borderRadius: '8px',
+                      border: '2px solid #0ea5e9',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e0f2fe'
+                      e.currentTarget.style.borderColor = '#0284c7'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f0f9ff'
+                      e.currentTarget.style.borderColor = '#0ea5e9'
+                    }}
+                  >
+                    {/* Day Header */}
+                    <div style={{
+                      fontSize: '1.25rem',
+                      fontWeight: '700',
+                      color: '#0c4a6e',
+                      marginBottom: '0.75rem',
+                      paddingBottom: '0.75rem',
+                      borderBottom: '2px solid #0ea5e9'
+                    }}>
+                      {WEEKDAYS[schedule.weekday - 1]}
                     </div>
 
-                    {schedule.is_recurring && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        color: '#059669',
-                        fontSize: '0.875rem',
-                        marginTop: '0.25rem'
+                    {/* Shift Time */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      color: '#0c4a6e',
+                      fontSize: '0.95rem',
+                      fontWeight: '500',
+                      marginBottom: '1rem'
+                    }}>
+                      <span>🕐</span>
+                      {schedule.start_time} - {schedule.end_time}
+                      <span style={{
+                        marginLeft: 'auto',
+                        fontSize: '0.85rem',
+                        backgroundColor: '#dbeafe',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        color: '#0c4a6e'
                       }}>
-                        <span>✓</span> Recurring every week
-                      </div>
-                    )}
-                  </div>
+                        {(() => {
+                          const start = new Date(`2000-01-01 ${schedule.start_time}`)
+                          const end = new Date(`2000-01-01 ${schedule.end_time}`)
+                          const diff = (end - start) / (1000 * 60 * 60)
+                          return `${diff.toFixed(1)}h`
+                        })()}
+                      </span>
+                    </div>
 
-                  {/* Duration in hours */}
-                  <div style={{
-                    marginTop: '0.75rem',
-                    paddingTop: '0.75rem',
-                    borderTop: '1px solid #cbd5e1',
-                    fontSize: '0.875rem',
-                    color: '#64748b',
-                    textAlign: 'right'
-                  }}>
-                    {(() => {
-                      const start = new Date(`2000-01-01 ${schedule.start_time}`)
-                      const end = new Date(`2000-01-01 ${schedule.end_time}`)
-                      const diff = (end - start) / (1000 * 60 * 60)
-                      return `${diff.toFixed(1)} hrs`
-                    })()}
+                    {/* Patients Section */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        color: '#64748b',
+                        marginBottom: '0.75rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        👥 Assigned Patients ({patientsForDay.length})
+                      </div>
+
+                      {patientsForDay.length === 0 ? (
+                        <div style={{
+                          padding: '1rem',
+                          backgroundColor: 'white',
+                          borderRadius: '6px',
+                          border: '1px dashed #cbd5e1',
+                          color: '#94a3b8',
+                          textAlign: 'center',
+                          fontSize: '0.85rem'
+                        }}>
+                          No patients scheduled for this shift
+                        </div>
+                      ) : (
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}>
+                          {patientsForDay.map((patient, idx) => (
+                            <div
+                              key={`${patient.id}-${idx}`}
+                              onClick={() => setSelectedPatient(patient)}
+                              style={{
+                                padding: '0.75rem',
+                                backgroundColor: 'white',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                borderLeft: '3px solid #10b981'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#f0fdf4'
+                                e.currentTarget.style.borderColor = '#10b981'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'white'
+                                e.currentTarget.style.borderColor = '#cbd5e1'
+                              }}
+                            >
+                              <div style={{
+                                fontWeight: '600',
+                                color: '#0c4a6e',
+                                fontSize: '0.95rem',
+                                marginBottom: '0.25rem'
+                              }}>
+                                {patient.name}
+                              </div>
+
+                              <div style={{
+                                display: 'grid',
+                                gap: '0.25rem',
+                                fontSize: '0.8rem',
+                                color: '#64748b'
+                              }}>
+                                {patient.scheduled_visit_time && (
+                                  <div>⏰ {patient.scheduled_visit_time}</div>
+                                )}
+                                {patient.service_area && (
+                                  <div>📍 {patient.service_area}</div>
+                                )}
+                                {patient.care_needed && (
+                                  <div>🏥 {patient.care_needed}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -574,9 +695,24 @@ export default function ProfessionalView({ profile }) {
                               <span style={{ color: '#64748b' }}>🏥</span> {patient.care_needed}
                             </div>
                           )}
-                          {patient.next_appointment_date && (
-                            <div>
-                              <span style={{ color: '#64748b' }}>📅</span> {new Date(patient.next_appointment_date).toLocaleDateString()}
+                          {patient.scheduled_visit_date && (
+                            <div style={{ 
+                              padding: '0.5rem',
+                              backgroundColor: '#dbeafe',
+                              borderRadius: '4px',
+                              border: '1px solid #0ea5e9'
+                            }}>
+                              <span style={{ color: '#0c4a6e', fontWeight: 'bold' }}>📅 Scheduled Visit:</span> {new Date(patient.scheduled_visit_date).toLocaleDateString()} at {patient.scheduled_visit_time}
+                            </div>
+                          )}
+                          {patient.service_area && (
+                            <div style={{ 
+                              padding: '0.5rem',
+                              backgroundColor: '#f0f9ff',
+                              borderRadius: '4px',
+                              border: '1px solid #7dd3fc'
+                            }}>
+                              <span style={{ color: '#0c4a6e', fontWeight: 'bold' }}>🏘️ Visit Area:</span> {patient.service_area}
                             </div>
                           )}
                         </div>
@@ -732,6 +868,50 @@ export default function ProfessionalView({ profile }) {
                       </label>
                       <p style={{ margin: 0, color: '#0c4a6e', fontSize: '1rem' }}>
                         {selectedPatient.care_needed}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Scheduled Visit Date & Time */}
+                  {selectedPatient.scheduled_visit_date && (
+                    <div style={{ 
+                      padding: '1rem',
+                      backgroundColor: '#dbeafe',
+                      borderRadius: '8px',
+                      border: '2px solid #0ea5e9'
+                    }}>
+                      <label style={{ display: 'block', color: '#0c4a6e', fontSize: '0.875rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                        📅 Scheduled Visit
+                      </label>
+                      <div style={{ color: '#0c4a6e', fontSize: '1rem' }}>
+                        <p style={{ margin: '0.25rem 0' }}>
+                          <strong>Date:</strong> {new Date(selectedPatient.scheduled_visit_date).toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                        <p style={{ margin: '0.25rem 0' }}>
+                          <strong>Time:</strong> {selectedPatient.scheduled_visit_time}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service Area */}
+                  {selectedPatient.service_area && (
+                    <div style={{ 
+                      padding: '1rem',
+                      backgroundColor: '#f0f9ff',
+                      borderRadius: '8px',
+                      border: '2px solid #7dd3fc'
+                    }}>
+                      <label style={{ display: 'block', color: '#0c4a6e', fontSize: '0.875rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                        🏘️ Service Area
+                      </label>
+                      <p style={{ margin: 0, color: '#0c4a6e', fontSize: '1rem', fontWeight: '500' }}>
+                        {selectedPatient.service_area}
                       </p>
                     </div>
                   )}
