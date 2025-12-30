@@ -5,6 +5,7 @@ import CoordinatorSchedules from './components/CoordinatorSchedules'
 import PatientView from './components/PatientView'
 import ProfessionalView from './components/ProfessionalView'
 import SupervisorDashboard from './components/SupervisorDashboard'
+import PatientAssignmentManager from './components/PatientAssignmentManager'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -109,8 +110,8 @@ export default function App() {
 
         {session && profile && profile.role === 'coordinator' && (
           <>
-            <p className="lead">Coordinator view — upcoming visits are shown below.</p>
-            <CoordinatorSchedules />
+            <p className="lead">Coordinator view — manage patient assignments and schedules.</p>
+            <PatientAssignmentManager profile={profile} />
           </>
         )}
 

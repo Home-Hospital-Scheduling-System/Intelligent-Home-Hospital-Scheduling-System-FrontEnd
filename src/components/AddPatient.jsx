@@ -94,7 +94,9 @@ export default function AddPatient({ profileId, onPatientAdded }) {
     address: '',
     area: '',
     care_needed: '',
-    next_appointment_date: '',
+    preferred_visit_time: '',
+    visit_time_flexibility: 'flexible',
+    visit_notes: '',
     medical_notes: ''
   })
 
@@ -131,7 +133,9 @@ export default function AddPatient({ profileId, onPatientAdded }) {
             address: formData.address,
             area: formData.area,
             care_needed: formData.care_needed,
-            next_appointment_date: formData.next_appointment_date || null,
+            preferred_visit_time: formData.preferred_visit_time || null,
+            visit_time_flexibility: formData.visit_time_flexibility,
+            visit_notes: formData.visit_notes || null,
             medical_notes: formData.medical_notes,
             profile_id: profileId
           }
@@ -151,7 +155,9 @@ export default function AddPatient({ profileId, onPatientAdded }) {
           address: '',
           area: '',
           care_needed: '',
-          next_appointment_date: '',
+          preferred_visit_time: '',
+          visit_time_flexibility: 'flexible',
+          visit_notes: '',
           medical_notes: ''
         })
         // Callback to refresh patient list
@@ -366,6 +372,79 @@ export default function AddPatient({ profileId, onPatientAdded }) {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                ⏰ Preferred Visit Time
+              </label>
+              <input
+                type="time"
+                name="preferred_visit_time"
+                value={formData.preferred_visit_time}
+                onChange={handleInputChange}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem' }}>
+                Patient's preferred time for home visits (e.g., morning, afternoon)
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                🎯 Visit Time Flexibility
+              </label>
+              <select
+                name="visit_time_flexibility"
+                value={formData.visit_time_flexibility}
+                onChange={handleInputChange}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="strict">Strict - Must be exact time</option>
+                <option value="flexible">Flexible - ±1 hour window acceptable</option>
+                <option value="very_flexible">Very Flexible - ±2+ hours acceptable</option>
+              </select>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem' }}>
+                How flexible the patient is with visit timing
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                📋 Visit Notes
+              </label>
+              <textarea
+                name="visit_notes"
+                value={formData.visit_notes}
+                onChange={handleInputChange}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  minHeight: '80px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+                placeholder="Any special notes about visit timing or scheduling preferences (e.g., busy on weekends, prefers mornings, etc.)"
+              />
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
