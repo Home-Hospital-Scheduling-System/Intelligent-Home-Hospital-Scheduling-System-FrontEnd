@@ -8,6 +8,21 @@
 -- - patients: id (SERIAL), name, phone, email, address, area, care_needed, medical_notes, profile_id
 
 -- =====================================================
+-- OPTIONAL: CLEANUP EXISTING MOCK DATA
+-- =====================================================
+-- Uncomment the following lines if you want to reset the database
+-- WARNING: This will delete ALL existing data!
+
+-- DELETE FROM schedules;
+-- DELETE FROM working_hours;
+-- DELETE FROM professional_specializations;
+-- DELETE FROM professional_service_areas;
+-- DELETE FROM professionals;
+-- DELETE FROM patients WHERE profile_id IN (SELECT id FROM profiles WHERE role = 'patient');
+-- DELETE FROM profiles WHERE role = 'patient';
+-- DELETE FROM profiles WHERE role = 'professional' AND id LIKE 'a1000001%';
+
+-- =====================================================
 -- PART 0: ADD PATIENT VISIT TIME COLUMNS (MIGRATION)
 -- =====================================================
 -- This adds the columns needed for visit time preferences
@@ -429,5 +444,158 @@ GROUP BY
         ELSE 'Late Afternoon (15:00+)'
     END
 ORDER BY time_slot;
+
+-- =====================================================
+-- PART 9: ADD LOCATIONS FOR HOME VISITS
+-- =====================================================
+
+INSERT INTO locations (name, address, type, phone) VALUES
+('Oulu Home Care Office', 'Torikatu 22, 90100 Oulu', 'office', '+358401234000'),
+('OYS Home Hospital Unit', 'Kajaanintie 50, 90220 Oulu', 'hospital', '+358401234001'),
+('Kontinkangas Health Center', 'Aapistie 1, 90220 Oulu', 'clinic', '+358401234002'),
+('Tuira Health Station', 'Tuirantie 5, 90500 Oulu', 'clinic', '+358401234003'),
+('Keskusta Health Center', 'Hallituskatu 36, 90100 Oulu', 'clinic', '+358401234004')
+ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- PART 10: ADD SCHEDULES (VISITS) FOR PATIENTS
+-- =====================================================
+-- Create visits for the next 14 days for all 50 patients
+-- Each patient gets 1-3 visits based on their care priority
+
+DO $$
+DECLARE
+    pat RECORD;
+    prof_id INT;
+    loc_id INT;
+    coordinator_id UUID;
+    visit_date DATE;
+    visit_time TIME;
+    visit_end_time TIME;
+    visit_duration INTERVAL;
+    visit_count INT;
+    day_offset INT;
+    care_type TEXT;
+BEGIN
+    -- Get a coordinator profile ID (first one found)
+    SELECT id INTO coordinator_id FROM profiles WHERE role = 'coordinator' LIMIT 1;
+    
+    -- If no coordinator exists, use the first professional's profile as fallback
+    IF coordinator_id IS NULL THEN
+        SELECT profile_id INTO coordinator_id FROM professionals LIMIT 1;
+    END IF;
+    
+    -- Get main location ID
+    SELECT id INTO loc_id FROM locations WHERE name = 'Oulu Home Care Office' LIMIT 1;
+    IF loc_id IS NULL THEN
+        SELECT id INTO loc_id FROM locations LIMIT 1;
+    END IF;
+
+    -- Loop through all patients
+    FOR pat IN 
+        SELECT p.id, p.name, p.care_needed, p.area, p.preferred_visit_time, p.visit_time_flexibility
+        FROM patients p 
+        ORDER BY p.id
+    LOOP
+        -- Determine number of visits based on care type
+        care_type := pat.care_needed;
+        IF care_type IN ('Wound Dressing', 'Palliative Care', 'Post-operative Care', 'Medication Administration') THEN
+            visit_count := 3;  -- High priority: 3 visits in next 2 weeks
+        ELSIF care_type IN ('Nursing Care', 'Physical Therapy', 'Respiratory Care', 'Chronic Disease Management') THEN
+            visit_count := 2;  -- Medium priority: 2 visits
+        ELSE
+            visit_count := 1;  -- Low priority: 1 visit
+        END IF;
+        
+        -- Determine visit duration based on care type
+        IF care_type IN ('Palliative Care', 'Physical Therapy', 'Post-operative Care') THEN
+            visit_duration := INTERVAL '60 minutes';
+        ELSIF care_type IN ('Wound Dressing', 'Medication Administration', 'Chronic Disease Management') THEN
+            visit_duration := INTERVAL '45 minutes';
+        ELSE
+            visit_duration := INTERVAL '30 minutes';
+        END IF;
+        
+        -- Find a matching professional based on patient's area
+        SELECT pr.id INTO prof_id 
+        FROM professionals pr
+        JOIN professional_service_areas psa ON pr.id = psa.professional_id
+        WHERE psa.service_area = pat.area
+        ORDER BY RANDOM()
+        LIMIT 1;
+        
+        -- If no matching professional found, get any active professional
+        IF prof_id IS NULL THEN
+            SELECT id INTO prof_id FROM professionals WHERE is_active = true ORDER BY RANDOM() LIMIT 1;
+        END IF;
+        
+        -- Create visits for this patient
+        FOR i IN 1..visit_count LOOP
+            -- Spread visits over the next 14 days
+            day_offset := (i - 1) * (14 / visit_count) + (pat.id % 3);
+            visit_date := CURRENT_DATE + day_offset;
+            
+            -- Skip weekends
+            WHILE EXTRACT(DOW FROM visit_date) IN (0, 6) LOOP
+                visit_date := visit_date + 1;
+            END LOOP;
+            
+            -- Use patient's preferred visit time or default
+            IF pat.preferred_visit_time IS NOT NULL THEN
+                visit_time := pat.preferred_visit_time;
+            ELSE
+                visit_time := '10:00:00'::TIME;
+            END IF;
+            
+            visit_end_time := visit_time + visit_duration;
+            
+            -- Insert the schedule
+            INSERT INTO schedules (
+                patient_id, 
+                professional_id, 
+                location_id, 
+                assigned_by_profile, 
+                start_time, 
+                end_time, 
+                status, 
+                notes
+            ) VALUES (
+                pat.id,
+                prof_id,
+                loc_id,
+                coordinator_id,
+                (visit_date + visit_time)::TIMESTAMP,
+                (visit_date + visit_end_time)::TIMESTAMP,
+                'scheduled',
+                'Home visit - ' || care_type || '. Patient: ' || pat.name
+            );
+        END LOOP;
+    END LOOP;
+END $$;
+
+-- =====================================================
+-- VERIFICATION QUERIES (continued)
+-- =====================================================
+
+SELECT 'Schedules created:' as info;
+SELECT COUNT(*) as total_schedules FROM schedules;
+
+SELECT 'Schedules by status:' as info;
+SELECT status, COUNT(*) as count FROM schedules GROUP BY status;
+
+SELECT 'Upcoming visits (next 7 days):' as info;
+SELECT 
+    s.id,
+    p.name as patient_name,
+    pr.kind as professional_type,
+    s.start_time,
+    s.status
+FROM schedules s
+JOIN patients p ON s.patient_id = p.id
+JOIN professionals pr ON s.professional_id = pr.id
+WHERE s.start_time >= CURRENT_DATE 
+AND s.start_time < CURRENT_DATE + INTERVAL '7 days'
+ORDER BY s.start_time
+LIMIT 20;
 
 SELECT '=== DATA LOADED SUCCESSFULLY ===' as info;
