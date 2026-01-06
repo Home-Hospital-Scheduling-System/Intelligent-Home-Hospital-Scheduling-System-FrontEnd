@@ -4,6 +4,61 @@ import { supabase } from './supabaseClient'
  * Advanced AI Assignment with Time Slot & Route Optimization
  */
 
+// Care type to required specializations mapping (same as aiAssignmentEngine)
+const CARE_SPECIALTY_MAP = {
+  'wound dressing': ['Wound Care', 'Wound Care Specialist', 'Post-operative Care', 'Nursing Care'],
+  'wound care': ['Wound Care', 'Wound Care Specialist', 'Post-operative Care', 'Nursing Care'],
+  'post-operative care': ['Post-operative Care', 'Wound Care', 'Nursing Care', 'Acute Care'],
+  'iv therapy': ['IV Therapy Specialist', 'Nursing Care', 'Acute Care'],
+  'medication administration': ['Medication Administration', 'Medication Management', 'Nursing Care'],
+  'palliative care': ['Palliative Care', 'Elderly Care', 'Nursing Care'],
+  'respiratory care': ['Respiratory Care', 'Pulmonology', 'Nursing Care'],
+  'diabetic care': ['Diabetic Care', 'Chronic Disease Management', 'Endocrinology'],
+  'elderly care': ['Elderly Care', 'Home Health Aide', 'Nursing Care', 'Geriatric Care'],
+  'home health aide': ['Home Health Aide', 'Nursing Care', 'Elderly Care'],
+  'nursing care': ['Nursing Care', 'Home Health Aide', 'Medication Administration'],
+  'physical therapy': ['Physical Therapy', 'Rehabilitation', 'Occupational Therapy'],
+  'chronic disease management': ['Chronic Disease Management', 'Nursing Care'],
+  'cardiac care': ['Cardiac Care', 'Cardiology', 'Cardiovascular Assessment'],
+  'general checkup': ['Home Health Aide', 'Nursing Care', 'General Practice']
+}
+
+// Helper: Check if professional has required skills for the care type
+function checkSkillMatch(patientCareNeeded, professionalSpecializations) {
+  if (!patientCareNeeded || !professionalSpecializations || professionalSpecializations.length === 0) {
+    return false
+  }
+
+  const careNeededLower = patientCareNeeded.toLowerCase()
+  const profSpecs = professionalSpecializations.map(s => s.specialization.toLowerCase())
+
+  // Direct specialty match (exact)
+  if (profSpecs.some(spec => spec === careNeededLower)) return true
+
+  // Check against care type mapping for appropriate specializations
+  for (const [careType, validSpecs] of Object.entries(CARE_SPECIALTY_MAP)) {
+    if (careNeededLower.includes(careType)) {
+      const hasValidSpec = validSpecs.some(validSpec => 
+        profSpecs.some(profSpec => 
+          profSpec.includes(validSpec.toLowerCase()) || validSpec.toLowerCase().includes(profSpec)
+        )
+      )
+      if (hasValidSpec) return true
+    }
+  }
+
+  // Partial match - meaningful keyword overlap (excluding common words)
+  const stopWords = ['care', 'therapy', 'management', 'specialist', 'home', 'health']
+  const careWords = careNeededLower.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w))
+  
+  const meaningfulMatch = profSpecs.some(spec => {
+    const specWords = spec.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w))
+    return careWords.some(word => specWords.some(sw => sw.includes(word) || word.includes(sw)))
+  })
+  
+  return meaningfulMatch
+}
+
 // Time slot configurations
 const CARE_DURATION = {
   'Wound Dressing': 45,
@@ -343,18 +398,19 @@ export async function findBestAssignmentWithTimeSlots(patientId) {
       // Check if at capacity
       if (prof.current_patient_count >= prof.max_patients) continue
 
-      // Check skill match
+      // Check skill match - must have relevant specialization
       const { data: specializations } = await supabase
         .from('professional_specializations')
         .select('specialization')
         .eq('professional_id', prof.id)
 
-      const skillMatch = specializations.some(s =>
-        patient.care_needed.toLowerCase().includes(s.specialization.toLowerCase()) ||
-        s.specialization.toLowerCase().includes(patient.care_needed.toLowerCase())
-      )
+      // Use improved skill matching logic
+      const skillMatch = checkSkillMatch(patient.care_needed, specializations)
 
-      if (!skillMatch) continue
+      if (!skillMatch) {
+        console.log(`  ✗ Skipping ${prof.profiles?.full_name} - no skill match for "${patient.care_needed}"`)
+        continue
+      }
 
       // Check service area coverage
       const { data: serviceAreas } = await supabase

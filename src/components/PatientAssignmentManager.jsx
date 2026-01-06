@@ -7,8 +7,11 @@ import { findBestAssignmentWithTimeSlots, calculateAvailableTimeSlots } from '..
 export default function PatientAssignmentManager({ profile }) {
   const [unassignedPatients, setUnassignedPatients] = useState([])
   const [assignedPatients, setAssignedPatients] = useState([])
+  const [assignmentDetails, setAssignmentDetails] = useState({}) // Map patient_id -> assignment info with professional
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [showAssignForm, setShowAssignForm] = useState(false)
+  const [showReassignModal, setShowReassignModal] = useState(false) // New: for reassignment
+  const [reassignPatient, setReassignPatient] = useState(null) // New: patient being reassigned
   const [activeTab, setActiveTab] = useState('unassigned')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -20,10 +23,12 @@ export default function PatientAssignmentManager({ profile }) {
   const [showAiMatches, setShowAiMatches] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [unassigning, setUnassigning] = useState(false)
+  const [allProfessionals, setAllProfessionals] = useState([]) // New: for reassignment dropdown
 
   useEffect(() => {
     loadPatients()
     loadSpecializations()
+    loadAllProfessionals()
   }, [])
 
   async function loadPatients() {
@@ -39,13 +44,45 @@ export default function PatientAssignmentManager({ profile }) {
 
       if (patientsError) throw patientsError
 
-      // Get assigned patients
+      // Get assigned patients with professional details
       const { data: assignments, error: assignmentsError } = await supabase
         .from('patient_assignments')
-        .select('patient_id')
+        .select(`
+          id,
+          patient_id,
+          professional_id,
+          scheduled_visit_date,
+          scheduled_visit_time,
+          service_area,
+          status,
+          match_score,
+          professionals(
+            id,
+            kind,
+            specialty,
+            profiles(full_name, phone)
+          )
+        `)
         .eq('status', 'active')
 
       if (assignmentsError) throw assignmentsError
+
+      // Build assignment details map
+      const detailsMap = {}
+      assignments.forEach(a => {
+        detailsMap[a.patient_id] = {
+          assignmentId: a.id,
+          professionalId: a.professional_id,
+          professionalName: a.professionals?.profiles?.full_name || 'Unknown',
+          professionalKind: a.professionals?.kind || 'Unknown',
+          professionalSpecialty: a.professionals?.specialty || 'N/A',
+          professionalPhone: a.professionals?.profiles?.phone || 'N/A',
+          scheduledDate: a.scheduled_visit_date,
+          scheduledTime: a.scheduled_visit_time,
+          matchScore: a.match_score
+        }
+      })
+      setAssignmentDetails(detailsMap)
 
       const assignedIds = new Set(assignments.map(a => a.patient_id))
 
@@ -78,6 +115,90 @@ export default function PatientAssignmentManager({ profile }) {
       setAllSpecializations(uniqueSpecs.sort())
     } catch (err) {
       console.error('Error in loadSpecializations:', err)
+    }
+  }
+
+  // Load all active professionals for reassignment dropdown
+  async function loadAllProfessionals() {
+    try {
+      const { data, error } = await supabase
+        .from('professionals')
+        .select(`
+          id,
+          kind,
+          specialty,
+          max_patients,
+          current_patient_count,
+          is_active,
+          profiles(full_name)
+        `)
+        .eq('is_active', true)
+        .order('current_patient_count', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching professionals:', error)
+        return
+      }
+
+      setAllProfessionals(data || [])
+    } catch (err) {
+      console.error('Error in loadAllProfessionals:', err)
+    }
+  }
+
+  // Handle reassigning a patient to a different professional
+  async function handleReassignPatient(patientId, newProfessionalId) {
+    if (!patientId || !newProfessionalId) return
+
+    try {
+      setAiLoading(true)
+      
+      // Get the current assignment
+      const assignment = assignmentDetails[patientId]
+      if (!assignment) {
+        setError('Could not find current assignment')
+        return
+      }
+
+      // Update the assignment with new professional
+      const { error: updateError } = await supabase
+        .from('patient_assignments')
+        .update({ 
+          professional_id: newProfessionalId,
+          assignment_date: new Date().toISOString(),
+          assigned_by_id: profile.id
+        })
+        .eq('id', assignment.assignmentId)
+
+      if (updateError) throw updateError
+
+      // Update patient counts - decrement old professional
+      await supabase
+        .from('professionals')
+        .update({ current_patient_count: supabase.rpc('decrement_count') })
+        .eq('id', assignment.professionalId)
+
+      // Increment new professional
+      await supabase
+        .from('professionals')
+        .update({ current_patient_count: supabase.rpc('increment_count') })
+        .eq('id', newProfessionalId)
+
+      // Reload patients to refresh the view
+      await loadPatients()
+      
+      setShowReassignModal(false)
+      setReassignPatient(null)
+      setError('')
+      
+      // Get the new professional's name for the success message
+      const newProf = allProfessionals.find(p => p.id === newProfessionalId)
+      alert(`✓ Patient successfully reassigned to ${newProf?.profiles?.full_name || 'new professional'}!`)
+      
+    } catch (err) {
+      setError('Failed to reassign patient: ' + err.message)
+    } finally {
+      setAiLoading(false)
     }
   }
 
@@ -788,7 +909,7 @@ export default function PatientAssignmentManager({ profile }) {
                   alignItems: 'start'
                 }}
               >
-                <div>
+                <div style={{ flex: 1 }}>
                   <h3 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e' }}>👤 {patient.name}</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.9rem' }}>
                     <div>
@@ -804,6 +925,54 @@ export default function PatientAssignmentManager({ profile }) {
                       <span style={{ color: '#64748b' }}>📍 Address:</span> <strong>{patient.address}</strong>
                     </div>
                   </div>
+                  
+                  {/* Show assigned professional info */}
+                  {activeTab === 'assigned' && assignmentDetails[patient.id] && (
+                    <div style={{ 
+                      marginTop: '1rem', 
+                      padding: '0.75rem', 
+                      backgroundColor: '#dbeafe', 
+                      borderRadius: '6px',
+                      border: '1px solid #93c5fd'
+                    }}>
+                      <div style={{ fontWeight: '600', color: '#1e40af', marginBottom: '0.5rem' }}>
+                        👨‍⚕️ Assigned Professional
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <div>
+                          <span style={{ color: '#3b82f6' }}>Name:</span>{' '}
+                          <strong>{assignmentDetails[patient.id].professionalName}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#3b82f6' }}>Type:</span>{' '}
+                          <strong>{assignmentDetails[patient.id].professionalKind === 'doctor' ? '👨‍⚕️ Doctor' : '👩‍⚕️ Nurse'}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#3b82f6' }}>Specialty:</span>{' '}
+                          <strong>{assignmentDetails[patient.id].professionalSpecialty}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#3b82f6' }}>Phone:</span>{' '}
+                          <strong>{assignmentDetails[patient.id].professionalPhone}</strong>
+                        </div>
+                        {assignmentDetails[patient.id].scheduledDate && (
+                          <div>
+                            <span style={{ color: '#3b82f6' }}>📅 Next Visit:</span>{' '}
+                            <strong>{assignmentDetails[patient.id].scheduledDate}</strong>
+                            {assignmentDetails[patient.id].scheduledTime && (
+                              <span> at {assignmentDetails[patient.id].scheduledTime}</span>
+                            )}
+                          </div>
+                        )}
+                        {assignmentDetails[patient.id].matchScore && (
+                          <div>
+                            <span style={{ color: '#3b82f6' }}>🎯 Match Score:</span>{' '}
+                            <strong>{assignmentDetails[patient.id].matchScore}%</strong>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {activeTab === 'unassigned' && (
@@ -851,31 +1020,220 @@ export default function PatientAssignmentManager({ profile }) {
                 )}
 
                 {activeTab === 'assigned' && (
-                  <button
-                    onClick={() => handleUnassignPatient(patient.id, patient.name)}
-                    disabled={unassigning}
-                    style={{
-                      padding: '0.6rem 1.2rem',
-                      backgroundColor: unassigning ? '#cbd5e1' : '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: unassigning ? 'not-allowed' : 'pointer',
-                      fontWeight: '600',
-                      fontSize: '0.85rem',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.2s'
-                    }}
-                    title="Remove this patient from assignment and make available for reassignment"
-                  >
-                    ↩️ Unassign
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => {
+                        setReassignPatient(patient)
+                        setShowReassignModal(true)
+                      }}
+                      style={{
+                        padding: '0.6rem 1.2rem',
+                        backgroundColor: '#0ea5e9',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        fontSize: '0.85rem',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Change the assigned professional for this patient"
+                    >
+                      🔄 Change Doctor
+                    </button>
+                    <button
+                      onClick={() => handleUnassignPatient(patient.id, patient.name)}
+                      disabled={unassigning}
+                      style={{
+                        padding: '0.6rem 1.2rem',
+                        backgroundColor: unassigning ? '#cbd5e1' : '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: unassigning ? 'not-allowed' : 'pointer',
+                        fontWeight: '600',
+                        fontSize: '0.85rem',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Remove this patient from assignment and make available for reassignment"
+                    >
+                      ↩️ Unassign
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Reassign Modal */}
+      {showReassignModal && reassignPatient && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1001
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '2rem',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <h2 style={{ margin: '0 0 1rem 0', color: '#0c4a6e' }}>
+              🔄 Reassign Patient
+            </h2>
+            
+            {/* Patient info */}
+            <div style={{
+              padding: '1rem',
+              backgroundColor: '#f0fdf4',
+              borderRadius: '8px',
+              border: '1px solid #86efac',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#166534' }}>
+                👤 {reassignPatient.name}
+              </h3>
+              <p style={{ margin: 0, color: '#15803d', fontSize: '0.9rem' }}>
+                🏥 Care Needed: {reassignPatient.care_needed} | 📍 {reassignPatient.area}
+              </p>
+              {assignmentDetails[reassignPatient.id] && (
+                <p style={{ margin: '0.5rem 0 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+                  Currently assigned to: <strong>{assignmentDetails[reassignPatient.id].professionalName}</strong>
+                </p>
+              )}
+            </div>
+
+            {/* Professional selection */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#0c4a6e' }}>
+                Select New Professional:
+              </label>
+              <select
+                id="newProfessional"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  backgroundColor: 'white'
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>-- Choose a professional --</option>
+                {allProfessionals
+                  .filter(p => assignmentDetails[reassignPatient.id]?.professionalId !== p.id) // Exclude current
+                  .map(prof => (
+                    <option key={prof.id} value={prof.id}>
+                      {prof.profiles?.full_name || 'Unknown'} - {prof.kind === 'doctor' ? '👨‍⚕️ Doctor' : '👩‍⚕️ Nurse'} ({prof.specialty}) 
+                      [{prof.current_patient_count}/{prof.max_patients} patients]
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+
+            {/* AI Recommendation button */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <button
+                onClick={async () => {
+                  setAiLoading(true)
+                  try {
+                    const matches = await findBestMatches(reassignPatient.id)
+                    if (matches && matches.length > 0) {
+                      // Auto-select the best match
+                      const bestMatch = matches[0]
+                      const select = document.getElementById('newProfessional')
+                      if (select) select.value = bestMatch.professional_id
+                      alert(`🤖 AI Recommendation: ${bestMatch.professional_name}\n\nMatch Score: ${bestMatch.finalScore}%\n${bestMatch.reasoning}`)
+                    } else {
+                      alert('No suitable professionals found for this patient.')
+                    }
+                  } catch (err) {
+                    alert('Error getting AI recommendation: ' + err.message)
+                  } finally {
+                    setAiLoading(false)
+                  }
+                }}
+                disabled={aiLoading}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  backgroundColor: aiLoading ? '#cbd5e1' : '#8b5cf6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: aiLoading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.95rem'
+                }}
+              >
+                🤖 {aiLoading ? 'Finding Best Match...' : 'Get AI Recommendation'}
+              </button>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowReassignModal(false)
+                  setReassignPatient(null)
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#e5e7eb',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const select = document.getElementById('newProfessional')
+                  const newProfId = select?.value
+                  if (!newProfId) {
+                    alert('Please select a professional')
+                    return
+                  }
+                  if (window.confirm(`Reassign ${reassignPatient.name} to the selected professional?`)) {
+                    handleReassignPatient(reassignPatient.id, parseInt(newProfId))
+                  }
+                }}
+                disabled={aiLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: aiLoading ? '#cbd5e1' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: aiLoading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                ✓ Confirm Reassignment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
