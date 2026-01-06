@@ -1,28 +1,64 @@
 import { supabase } from './supabaseClient'
 import { smartAssignPatient } from './timeSlotOptimizer'
 
+// Care type to required specializations mapping
+const CARE_SPECIALTY_MAP = {
+  'wound dressing': ['Wound Care', 'Wound Care Specialist', 'Post-operative Care', 'Nursing Care'],
+  'wound care': ['Wound Care', 'Wound Care Specialist', 'Post-operative Care', 'Nursing Care'],
+  'post-operative care': ['Post-operative Care', 'Wound Care', 'Nursing Care', 'Acute Care'],
+  'iv therapy': ['IV Therapy Specialist', 'Nursing Care', 'Acute Care'],
+  'medication administration': ['Medication Administration', 'Medication Management', 'Nursing Care'],
+  'palliative care': ['Palliative Care', 'Elderly Care', 'Nursing Care'],
+  'respiratory care': ['Respiratory Care', 'Pulmonology', 'Nursing Care'],
+  'diabetic care': ['Diabetic Care', 'Chronic Disease Management', 'Endocrinology'],
+  'elderly care': ['Elderly Care', 'Home Health Aide', 'Nursing Care', 'Geriatric Care'],
+  'home health aide': ['Home Health Aide', 'Nursing Care', 'Elderly Care'],
+  'nursing care': ['Nursing Care', 'Home Health Aide', 'Medication Administration'],
+  'physical therapy': ['Physical Therapy', 'Rehabilitation', 'Occupational Therapy'],
+  'chronic disease management': ['Chronic Disease Management', 'Nursing Care'],
+  'cardiac care': ['Cardiac Care', 'Cardiology', 'Cardiovascular Assessment'],
+  'general checkup': ['Home Health Aide', 'Nursing Care', 'General Practice']
+}
+
 // Helper: Calculate skill match score (0-100)
 function calculateSkillMatch(patientCareNeeded, professionalSpecializations) {
   if (!patientCareNeeded || !professionalSpecializations || professionalSpecializations.length === 0) {
     return 0
   }
 
-  // Direct specialty match
-  const directMatch = professionalSpecializations.some(spec => 
-    spec.specialization.toLowerCase() === patientCareNeeded.toLowerCase()
-  )
+  const careNeededLower = patientCareNeeded.toLowerCase()
+  const profSpecs = professionalSpecializations.map(s => s.specialization.toLowerCase())
+
+  // Direct specialty match (exact)
+  const directMatch = profSpecs.some(spec => spec === careNeededLower)
   if (directMatch) return 100
 
-  // Partial match (keyword overlap)
-  const careWords = patientCareNeeded.toLowerCase().split(/\s+/)
-  const matchCount = professionalSpecializations.filter(spec => {
-    const specWords = spec.specialization.toLowerCase().split(/\s+/)
-    return careWords.some(word => specWords.includes(word))
-  }).length
+  // Check against care type mapping for appropriate specializations
+  for (const [careType, validSpecs] of Object.entries(CARE_SPECIALTY_MAP)) {
+    if (careNeededLower.includes(careType)) {
+      // Check if professional has any of the valid specializations for this care type
+      const hasValidSpec = validSpecs.some(validSpec => 
+        profSpecs.some(profSpec => 
+          profSpec.includes(validSpec.toLowerCase()) || validSpec.toLowerCase().includes(profSpec)
+        )
+      )
+      if (hasValidSpec) return 90 // Strong match via mapping
+    }
+  }
 
-  if (matchCount > 0) return 75
+  // Partial match - meaningful keyword overlap (excluding common words)
+  const stopWords = ['care', 'therapy', 'management', 'specialist', 'home', 'health']
+  const careWords = careNeededLower.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w))
+  
+  const meaningfulMatch = profSpecs.some(spec => {
+    const specWords = spec.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w))
+    return careWords.some(word => specWords.some(sw => sw.includes(word) || word.includes(sw)))
+  })
+  
+  if (meaningfulMatch) return 70
 
-  // Category match (nursing vs doctor)
+  // No meaningful match - this is critical! 
+  // Professionals without relevant skills should NOT be assigned
   return 0
 }
 
@@ -171,6 +207,14 @@ export async function findBestMatches(patientId) {
 
         // Calculate individual scores
         const skillScore = calculateSkillMatch(patient.care_needed, specializations)
+        
+        // CRITICAL: Skip professionals with no skill match
+        // A cardiologist should NOT be assigned to wound care patients
+        if (skillScore === 0) {
+          console.log(`  ✗ Skipping ${prof.profiles.full_name} (${prof.specialty}) - no skill match for "${patient.care_needed}"`)
+          return null
+        }
+        
         const availabilityScore = calculateAvailabilityScore(
           prof.current_patient_count,
           prof.max_patients,
