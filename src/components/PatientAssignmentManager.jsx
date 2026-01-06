@@ -313,13 +313,16 @@ export default function PatientAssignmentManager({ profile }) {
         const result = await autoAssignPatient(patient.id, profile.id, assignedInSession)
         if (result.success) {
           successCount++
-          // Add to session tracking
+          // Add to session tracking with complete info for time slot calculation
           if (result.assignment) {
             assignedInSession.push({
               id: result.assignment.id,
               professional_id: result.assignment.professional_id,
               scheduled_visit_date: result.assignment.scheduled_visit_date,
-              scheduled_visit_time: result.assignment.scheduled_visit_time
+              scheduled_visit_time: result.assignment.scheduled_visit_time,
+              // Include care_needed and service_area for accurate time slot blocking
+              care_needed: patient.care_needed,
+              service_area: result.assignment.service_area || patient.area
             })
           }
         } else {

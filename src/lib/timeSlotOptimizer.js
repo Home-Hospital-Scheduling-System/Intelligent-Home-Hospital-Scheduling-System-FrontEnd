@@ -238,7 +238,8 @@ function optimizeRoute(patients) {
 }
 
 // Calculate available time slots for professional on a specific day
-export async function calculateAvailableTimeSlots(professionalId, visitDate) {
+// existingAssignments: In-memory assignments from bulk operations (not yet in DB)
+export async function calculateAvailableTimeSlots(professionalId, visitDate, existingAssignments = []) {
   try {
     const dateObj = new Date(visitDate)
     const dayOfWeek = dateObj.getDay() === 0 ? 7 : dateObj.getDay()
@@ -255,7 +256,7 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate) {
       return { available: false, reason: 'No working hours assigned for this day', patientCountOnDay: 0, maxCapacity: 4 }
     }
 
-    // Get already assigned patients for this day - SEPARATE QUERY for safety
+    // Get already assigned patients for this day from DATABASE
     const { data: assignedPatients, error: assignError } = await supabase
       .from('patient_assignments')
       .select('id, scheduled_visit_date, scheduled_visit_time')
@@ -268,11 +269,18 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate) {
       return { available: false, reason: 'Error checking capacity', patientCountOnDay: 0, maxCapacity: 4 }
     }
 
+    // Filter in-memory assignments for this professional and date
+    const memoryAssignmentsForDay = existingAssignments.filter(a => 
+      a.professional_id === professionalId && a.scheduled_visit_date === visitDate
+    )
+
     // CAPACITY CHECK: Max 4 patients per day (8-hour shift)
-    const currentPatientCountOnDay = assignedPatients ? assignedPatients.length : 0
+    const dbCount = assignedPatients ? assignedPatients.length : 0
+    const memoryCount = memoryAssignmentsForDay.length
+    const currentPatientCountOnDay = dbCount + memoryCount
     const MAX_PATIENTS_PER_DAY = 4
 
-    console.log(`📊 Capacity check - Prof ${professionalId} on ${visitDate}: ${currentPatientCountOnDay}/${MAX_PATIENTS_PER_DAY} patients`)
+    console.log(`📊 Capacity check - Prof ${professionalId} on ${visitDate}: DB=${dbCount}, Memory=${memoryCount}, Total=${currentPatientCountOnDay}/${MAX_PATIENTS_PER_DAY} patients`)
 
     if (currentPatientCountOnDay >= MAX_PATIENTS_PER_DAY) {
       console.log(`❌ Day FULL: ${currentPatientCountOnDay}/${MAX_PATIENTS_PER_DAY}`)
@@ -291,11 +299,11 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate) {
     const dayStart = startHour * 60 + startMin // in minutes
     const dayEnd = endHour * 60 + endMin
 
-    // Create occupied slots from assigned patients
+    // Create occupied slots from DATABASE assignments
     const occupiedSlots = []
     let currentLocation = 'Keskusta (City Center)'
 
-    // Get full patient details for travel time calculation
+    // Get full patient details from DB for travel time calculation
     for (const assignment of assignedPatients || []) {
       const { data: patientData } = await supabase
         .from('patient_assignments')
@@ -316,6 +324,22 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate) {
 
         currentLocation = patientData.patients.service_area
       }
+    }
+
+    // Add occupied slots from IN-MEMORY assignments (bulk operation tracking)
+    for (const memAssignment of memoryAssignmentsForDay) {
+      const [visitHour, visitMin] = memAssignment.scheduled_visit_time.split(':').map(Number)
+      const visitStart = visitHour * 60 + visitMin
+      const careDuration = getCareDuration(memAssignment.care_needed || 'default')
+      const travelTime = getTravelTime(currentLocation, memAssignment.service_area || 'Keskusta (City Center)')
+
+      occupiedSlots.push({
+        start: Math.max(0, visitStart - travelTime),
+        end: Math.min(dayEnd, visitStart + careDuration + travelTime)
+      })
+
+      console.log(`🔒 Blocked time slot from in-memory assignment: ${memAssignment.scheduled_visit_time} (${careDuration} min care)`)
+      currentLocation = memAssignment.service_area || 'Keskusta (City Center)'
     }
 
     // Generate available slots
@@ -551,7 +575,8 @@ export async function smartAssignPatient(patientId, professionalId, assignedById
         continue
       }
 
-      const slots = await calculateAvailableTimeSlots(professionalId, dateStr)
+      // Pass existingAssignments to calculateAvailableTimeSlots to prevent time conflicts
+      const slots = await calculateAvailableTimeSlots(professionalId, dateStr, existingAssignments)
       slotsChecked++
 
       // Find a suitable time slot on this day
