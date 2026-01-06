@@ -13,17 +13,35 @@ function AppContent() {
   const [profile, setProfile] = useState(null)
 
   useEffect(() => {
+    let currentUserId = null
+    
     async function init() {
       const { data } = await supabase.auth.getSession()
-      setSession(data.session ?? null)
-      if (data.session?.user) await loadProfile(data.session.user)
+      const sess = data.session ?? null
+      currentUserId = sess?.user?.id || null
+      setSession(sess)
+      if (sess?.user) await loadProfile(sess.user)
     }
     init()
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess?.session ?? null)
-      if (sess?.session?.user) loadProfile(sess.session.user)
-      else setProfile(null)
+    const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
+      const newUserId = sess?.user?.id || null
+      
+      // Only update state if the user actually changed (signed in/out)
+      // Ignore token refresh events that happen when switching tabs
+      if (event === 'TOKEN_REFRESHED') {
+        // Token refresh - don't cause re-render, just update internal reference
+        currentUserId = newUserId
+        return
+      }
+      
+      // Only trigger state update if user ID changed
+      if (newUserId !== currentUserId) {
+        currentUserId = newUserId
+        setSession(sess ?? null)
+        if (sess?.user) loadProfile(sess.user)
+        else setProfile(null)
+      }
     })
     return () => listener?.subscription?.unsubscribe && listener.subscription.unsubscribe()
   }, [])
