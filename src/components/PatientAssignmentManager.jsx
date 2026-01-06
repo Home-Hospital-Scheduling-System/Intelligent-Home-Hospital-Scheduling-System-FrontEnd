@@ -322,7 +322,12 @@ export default function PatientAssignmentManager({ profile }) {
               scheduled_visit_time: result.assignment.scheduled_visit_time,
               // Include care_needed and service_area for accurate time slot blocking
               care_needed: patient.care_needed,
-              service_area: result.assignment.service_area || patient.area
+              service_area: result.assignment.service_area || patient.area,
+              // Include GPS coordinates for geo-based travel time calculation
+              latitude: patient.latitude,
+              longitude: patient.longitude,
+              // Include custom care duration if set
+              estimated_care_duration: patient.estimated_care_duration
             })
           }
         } else {

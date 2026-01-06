@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNotification } from './Notification'
+import { geocodeAddress } from '../lib/geoUtils'
 
 // Password validation helper
 function validatePassword(password) {
@@ -118,6 +119,7 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
     address: '',
     area: '',
     care_needed: '',
+    estimated_care_duration: '', // Custom duration in minutes
     preferred_visit_time: '',
     visit_time_flexibility: 'flexible',
     visit_notes: '',
@@ -251,11 +253,25 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
         address: formData.address,
         area: formData.area,
         care_needed: formData.care_needed,
+        estimated_care_duration: formData.estimated_care_duration ? parseInt(formData.estimated_care_duration) : null,
         preferred_visit_time: formData.preferred_visit_time || null,
         visit_time_flexibility: formData.visit_time_flexibility,
         visit_notes: formData.visit_notes || null,
         medical_notes: formData.medical_notes,
         profile_id: patientProfileId || profileId // Link to patient's own profile if created, otherwise use professional's
+      }
+
+      // Geocode the address to get GPS coordinates
+      if (formData.address) {
+        console.log('📍 Geocoding address:', formData.address)
+        const coords = await geocodeAddress(formData.address)
+        if (coords) {
+          patientData.latitude = coords.lat
+          patientData.longitude = coords.lng
+          console.log(`✅ Geocoded to: (${coords.lat}, ${coords.lng})`)
+        } else {
+          console.log('⚠️ Could not geocode address, using zone-based location')
+        }
       }
 
       const { data, error: insertError } = await supabase
@@ -284,6 +300,7 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
           address: '',
           area: '',
           care_needed: '',
+          estimated_care_duration: '',
           preferred_visit_time: '',
           visit_time_flexibility: 'flexible',
           visit_notes: '',
@@ -695,6 +712,37 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                ⏱️ Estimated Visit Duration
+              </label>
+              <select
+                name="estimated_care_duration"
+                value={formData.estimated_care_duration}
+                onChange={handleInputChange}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="">-- Auto (based on care type) --</option>
+                <option value="15">15 minutes - Quick check</option>
+                <option value="30">30 minutes - Standard visit</option>
+                <option value="45">45 minutes - Extended care</option>
+                <option value="60">1 hour - Comprehensive care</option>
+                <option value="90">1.5 hours - Complex procedures</option>
+                <option value="120">2 hours - Full assessment</option>
+              </select>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem' }}>
+                How long each visit typically takes. Leave blank to use default based on care type.
+              </div>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>

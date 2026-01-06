@@ -1,7 +1,9 @@
 import { supabase } from './supabaseClient'
+import { calculateTravelTime, calculateDistance, getTravelTimeBetweenLocations } from './geoUtils'
 
 /**
  * Advanced AI Assignment with Time Slot & Route Optimization
+ * Now with GPS-based distance calculation and route optimization
  */
 
 // Care type to required specializations mapping (same as aiAssignmentEngine)
@@ -183,55 +185,86 @@ const TRAVEL_TIME = {
 }
 
 // Get care duration for patient
-function getCareDuration(careNeeded) {
+// Uses custom estimated_care_duration if set, otherwise falls back to care type default
+function getCareDuration(careNeeded, estimatedCareDuration = null) {
+  // If patient has custom duration set, use it
+  if (estimatedCareDuration && estimatedCareDuration > 0) {
+    console.log(`⏱️ Using custom care duration: ${estimatedCareDuration} min`)
+    return estimatedCareDuration
+  }
+  // Otherwise use default based on care type
   return CARE_DURATION[careNeeded] || CARE_DURATION['default']
 }
 
-// Get travel time between two locations
-function getTravelTime(from, to) {
+// Get travel time between two locations (with GPS fallback to zone-based)
+function getTravelTime(from, to, fromCoords = null, toCoords = null) {
+  // If we have GPS coordinates, use real distance calculation
+  if (fromCoords?.lat && fromCoords?.lng && toCoords?.lat && toCoords?.lng) {
+    const time = calculateTravelTime(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng)
+    const distance = calculateDistance(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng)
+    console.log(`🚗 GPS Travel: ${from} → ${to} = ${distance.toFixed(1)} km, ${time} min`)
+    return time
+  }
+  
+  // Fallback to zone-based estimate
   if (!from || !to) return 15 // default 15 min
   const routeMap = TRAVEL_TIME[from]
   return routeMap ? (routeMap[to] || 20) : 20
 }
 
-// Generate optimized route for patients on a given day
-function optimizeRoute(patients) {
+// Generate optimized route for patients on a given day using GPS-based nearest neighbor
+function optimizeRoute(patients, startLocation = null) {
   if (patients.length === 0) return []
+  if (patients.length === 1) return patients
 
-  // Group patients by location
-  const byLocation = {}
-  patients.forEach(p => {
-    if (!byLocation[p.service_area]) {
-      byLocation[p.service_area] = []
-    }
-    byLocation[p.service_area].push(p)
-  })
+  // Default starting location (Oulu city center / hospital)
+  let currentLocation = startLocation || {
+    lat: 65.0121,
+    lng: 25.4651,
+    area: 'Keskusta (City Center)'
+  }
 
-  // Sort locations by proximity (simple nearest neighbor)
-  const locations = Object.keys(byLocation)
-  let optimizedRoute = []
-  let currentLocation = 'Keskusta (City Center)' // Start from city center
+  const remaining = [...patients]
+  const optimizedRoute = []
 
-  const visited = new Set()
-  while (visited.size < locations.length) {
-    let nearest = null
-    let minTravel = Infinity
+  console.log(`🗺️ Optimizing route for ${patients.length} patients using GPS`)
 
-    for (const loc of locations) {
-      if (!visited.has(loc)) {
-        const travel = getTravelTime(currentLocation, loc)
-        if (travel < minTravel) {
-          minTravel = travel
-          nearest = loc
-        }
+  while (remaining.length > 0) {
+    let nearestIndex = 0
+    let nearestDistance = Infinity
+
+    for (let i = 0; i < remaining.length; i++) {
+      const patient = remaining[i]
+      let distance
+
+      // Use GPS coordinates if available
+      if (patient.latitude && patient.longitude && currentLocation.lat && currentLocation.lng) {
+        distance = calculateDistance(
+          currentLocation.lat, currentLocation.lng,
+          patient.latitude, patient.longitude
+        )
+      } else {
+        // Fallback to zone-based estimate (convert minutes to pseudo-km)
+        distance = getTravelTime(currentLocation.area, patient.service_area || patient.area) / 2
+      }
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearestIndex = i
       }
     }
 
-    if (nearest) {
-      visited.add(nearest)
-      optimizedRoute.push(...byLocation[nearest])
-      currentLocation = nearest
+    const nearest = remaining.splice(nearestIndex, 1)[0]
+    optimizedRoute.push(nearest)
+
+    // Update current location for next iteration
+    currentLocation = {
+      lat: nearest.latitude,
+      lng: nearest.longitude,
+      area: nearest.service_area || nearest.area
     }
+
+    console.log(`  → Patient: ${nearest.name || nearest.id} (${currentLocation.area}) - ${nearestDistance.toFixed(2)} km from previous`)
   }
 
   return optimizedRoute
@@ -301,28 +334,49 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate, exi
 
     // Create occupied slots from DATABASE assignments
     const occupiedSlots = []
-    let currentLocation = 'Keskusta (City Center)'
+    // Track current location with coordinates for GPS-based travel time
+    let currentLocation = {
+      lat: 65.0121, // Default: Oulu city center
+      lng: 25.4651,
+      area: 'Keskusta (City Center)'
+    }
 
-    // Get full patient details from DB for travel time calculation
+    // Get full patient details from DB for travel time calculation (including GPS coords)
     for (const assignment of assignedPatients || []) {
       const { data: patientData } = await supabase
         .from('patient_assignments')
-        .select('patients(care_needed, service_area)')
+        .select('patients(care_needed, service_area, latitude, longitude, estimated_care_duration)')
         .eq('id', assignment.id)
         .single()
 
       if (patientData && patientData.patients) {
         const [visitHour, visitMin] = assignment.scheduled_visit_time.split(':').map(Number)
         const visitStart = visitHour * 60 + visitMin
-        const careDuration = getCareDuration(patientData.patients.care_needed)
-        const travelTime = getTravelTime(currentLocation, patientData.patients.service_area)
+        const careDuration = getCareDuration(patientData.patients.care_needed, patientData.patients.estimated_care_duration)
+        
+        // Use GPS-based travel time if coordinates available
+        const patientCoords = {
+          lat: patientData.patients.latitude,
+          lng: patientData.patients.longitude
+        }
+        const travelTime = getTravelTime(
+          currentLocation.area, 
+          patientData.patients.service_area,
+          currentLocation,
+          patientCoords
+        )
 
         occupiedSlots.push({
           start: Math.max(0, visitStart - travelTime),
           end: Math.min(dayEnd, visitStart + careDuration + travelTime)
         })
 
-        currentLocation = patientData.patients.service_area
+        // Update current location with coords for next calculation
+        currentLocation = {
+          lat: patientData.patients.latitude || currentLocation.lat,
+          lng: patientData.patients.longitude || currentLocation.lng,
+          area: patientData.patients.service_area
+        }
       }
     }
 
@@ -330,8 +384,19 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate, exi
     for (const memAssignment of memoryAssignmentsForDay) {
       const [visitHour, visitMin] = memAssignment.scheduled_visit_time.split(':').map(Number)
       const visitStart = visitHour * 60 + visitMin
-      const careDuration = getCareDuration(memAssignment.care_needed || 'default')
-      const travelTime = getTravelTime(currentLocation, memAssignment.service_area || 'Keskusta (City Center)')
+      const careDuration = getCareDuration(memAssignment.care_needed || 'default', memAssignment.estimated_care_duration)
+      
+      // Use GPS coords from memory assignment if available
+      const memCoords = {
+        lat: memAssignment.latitude,
+        lng: memAssignment.longitude
+      }
+      const travelTime = getTravelTime(
+        currentLocation.area, 
+        memAssignment.service_area || 'Keskusta (City Center)',
+        currentLocation,
+        memCoords
+      )
 
       occupiedSlots.push({
         start: Math.max(0, visitStart - travelTime),
@@ -339,7 +404,13 @@ export async function calculateAvailableTimeSlots(professionalId, visitDate, exi
       })
 
       console.log(`🔒 Blocked time slot from in-memory assignment: ${memAssignment.scheduled_visit_time} (${careDuration} min care)`)
-      currentLocation = memAssignment.service_area || 'Keskusta (City Center)'
+      
+      // Update current location with coords for next calculation
+      currentLocation = {
+        lat: memAssignment.latitude || currentLocation.lat,
+        lng: memAssignment.longitude || currentLocation.lng,
+        area: memAssignment.service_area || 'Keskusta (City Center)'
+      }
     }
 
     // Generate available slots
@@ -459,7 +530,7 @@ export async function findBestAssignmentWithTimeSlots(patientId) {
 
         const slots = await calculateAvailableTimeSlots(prof.id, dateStr)
         if (slots.available) {
-          const careDuration = getCareDuration(patient.care_needed)
+          const careDuration = getCareDuration(patient.care_needed, patient.estimated_care_duration)
           
           for (const slot of slots.availableSlots) {
             const slotDuration = slot.end - slot.start
@@ -482,7 +553,7 @@ export async function findBestAssignmentWithTimeSlots(patientId) {
     return {
       success: true,
       candidates: candidates.slice(0, 5), // Top 5
-      careDuration: getCareDuration(patient.care_needed)
+      careDuration: getCareDuration(patient.care_needed, patient.estimated_care_duration)
     }
   } catch (err) {
     console.error('Error in findBestAssignmentWithTimeSlots:', err)
@@ -543,7 +614,8 @@ export async function smartAssignPatient(patientId, professionalId, assignedById
     console.log(`🏥 Assigning patient ${patientId}. Preferred time: ${patient.preferred_visit_time || 'None'} (${patient.visit_time_flexibility})`)
 
     // Find the soonest available slot in next 14 days
-    const careDuration = getCareDuration(patient.care_needed)
+    const careDuration = getCareDuration(patient.care_needed, patient.estimated_care_duration)
+    console.log(`⏱️ Care duration: ${careDuration} min (${patient.estimated_care_duration ? 'custom' : 'default'})`)
     let bestSlot = null
     let slotsChecked = 0
     let daysSkipped = 0
