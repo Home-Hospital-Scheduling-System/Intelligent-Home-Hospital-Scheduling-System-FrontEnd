@@ -274,15 +274,23 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
         }
       }
 
+      console.log('📋 Inserting patient data:', patientData)
+      
       const { data, error: insertError } = await supabase
         .from('patients')
         .insert([patientData])
         .select()
 
+      console.log('📋 Insert result:', { data, error: insertError })
+
       if (insertError) {
         console.error('Insert error:', insertError)
         setError('Failed to add patient: ' + insertError.message)
+      } else if (!data || data.length === 0) {
+        console.error('No data returned from insert')
+        setError('Failed to add patient: No data returned. Check database permissions.')
       } else {
+        console.log('✅ Patient created successfully:', data[0])
         if (formData.createLogin) {
           setSuccess('Patient added successfully with login credentials!')
         } else {
