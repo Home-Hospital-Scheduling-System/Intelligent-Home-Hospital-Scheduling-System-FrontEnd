@@ -43,35 +43,47 @@ export default function PatientView({ profile }) {
           if (assignError) console.error('Error fetching assignments:', assignError)
           else setAssignments(assignData || [])
 
-          // Fetch upcoming schedules
-          const now = new Date().toISOString()
+          // Fetch upcoming visits from patient_assignments with scheduled dates
+          const today = new Date().toISOString().split('T')[0]
           const { data: schedData, error: schedError } = await supabase
-            .from('schedules')
+            .from('patient_assignments')
             .select('*, professionals(id, kind, specialty, profile_id), patients(area, care_needed, visit_time_flexibility, visit_notes)')
             .eq('patient_id', pData.id)
-            .gte('start_time', now)
-            .order('start_time', { ascending: true })
+            .eq('status', 'active')
+            .not('scheduled_visit_date', 'is', null)
+            .gte('scheduled_visit_date', today)
+            .order('scheduled_visit_date', { ascending: true })
+            .order('scheduled_visit_time', { ascending: true })
             .limit(20)
 
-          if (schedError) console.error('Error fetching schedules:', schedError)
+          if (schedError) console.error('Error fetching scheduled visits:', schedError)
           else setSchedules(schedData || [])
 
-          // Fetch professional details for each assignment
+          // Fetch professional details for both assignments and schedules
+          const proIds = new Set()
           if (assignData && assignData.length > 0) {
-            const proIds = assignData.map(a => a.professionals?.profile_id).filter(Boolean)
-            if (proIds.length > 0) {
-              const { data: profiles, error: profError } = await supabase
-                .from('profiles')
-                .select('id, full_name, phone, email')
-                .in('id', proIds)
+            assignData.forEach(a => {
+              if (a.professionals?.profile_id) proIds.add(a.professionals.profile_id)
+            })
+          }
+          if (schedData && schedData.length > 0) {
+            schedData.forEach(s => {
+              if (s.professionals?.profile_id) proIds.add(s.professionals.profile_id)
+            })
+          }
 
-              if (!profError && profiles) {
-                const proMap = {}
-                profiles.forEach(p => {
-                  proMap[p.id] = p
-                })
-                setProfessionalDetails(proMap)
-              }
+          if (proIds.size > 0) {
+            const { data: profiles, error: profError } = await supabase
+              .from('profiles')
+              .select('id, full_name, phone, email')
+              .in('id', Array.from(proIds))
+
+            if (!profError && profiles) {
+              const proMap = {}
+              profiles.forEach(p => {
+                proMap[p.id] = p
+              })
+              setProfessionalDetails(proMap)
             }
           }
         }
@@ -116,8 +128,16 @@ export default function PatientView({ profile }) {
     )
   }
 
-  const upcomingVisits = schedules.filter(s => new Date(s.start_time) > new Date())
-  const pastVisits = schedules.filter(s => new Date(s.start_time) <= new Date())
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const upcomingVisits = schedules.filter(s => {
+    const visitDate = new Date(s.scheduled_visit_date)
+    return visitDate >= today
+  })
+  const pastVisits = schedules.filter(s => {
+    const visitDate = new Date(s.scheduled_visit_date)
+    return visitDate < today
+  })
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
@@ -205,8 +225,7 @@ export default function PatientView({ profile }) {
           ) : (
             <div style={{ display: 'grid', gap: '1rem' }}>
               {upcomingVisits.map((visit, idx) => {
-                const startTime = new Date(visit.start_time)
-                const endTime = new Date(visit.end_time)
+                const visitDate = new Date(visit.scheduled_visit_date + 'T' + (visit.scheduled_visit_time || '00:00:00'))
                 const pro = visit.professionals
                 const proInfo = professionalDetails[pro?.profile_id]
                 const isExpanded = expandedVisit === visit.id
@@ -244,11 +263,18 @@ export default function PatientView({ profile }) {
                         </div>
                         <div style={{ display: 'grid', gap: '0.5rem', color: '#475569', fontSize: '0.95rem' }}>
                           <div>
-                            <strong>📆 Date:</strong> {startTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            <strong>📆 Date:</strong> {visitDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                           </div>
-                          <div>
-                            <strong>🕐 Time:</strong> {startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
+                          {visit.scheduled_visit_time && (
+                            <div>
+                              <strong>🕐 Time:</strong> {visit.scheduled_visit_time}
+                            </div>
+                          )}
+                          {visit.service_area && (
+                            <div>
+                              <strong>📍 Area:</strong> {visit.service_area}
+                            </div>
+                          )}
                           {visit.patients?.care_needed && (
                             <div>
                               <strong>🏥 Care Type:</strong> {visit.patients.care_needed}
@@ -324,7 +350,24 @@ export default function PatientView({ profile }) {
                             border: '1px solid #fcd34d'
                           }}>
                             <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>
-                              📝 Visit Notes
+                          
+
+                        {/* Assignment Notes */}
+                        {visit.assignment_reason && (
+                          <div style={{
+                            backgroundColor: 'white',
+                            padding: '1rem',
+                            borderRadius: '6px',
+                            border: '1px solid #fcd34d'
+                          }}>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>
+                              📝 Assignment Reason
+                            </div>
+                            <div style={{ color: '#78350f', fontSize: '0.95rem' }}>
+                              {visit.assignment_reason}
+                            </div>
+                          </div>
+                        )}    📝 Visit Notes
                             </div>
                             <div style={{ color: '#78350f', fontSize: '0.95rem' }}>
                               {visit.notes}
