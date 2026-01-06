@@ -9,7 +9,8 @@ export default function ProfessionalView({ profile }) {
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [modalTab, setModalTab] = useState('profile') // 'profile', 'addPatient', 'patients', or 'schedule'
+  const [modalTab, setModalTab] = useState('profile') // 'profile' or 'schedule'
+  const [mainTab, setMainTab] = useState('schedule') // 'schedule', 'patients', or 'addPatient'
   const [patientFilter, setPatientFilter] = useState('') // filter search term
   const [selectedPatient, setSelectedPatient] = useState(null) // selected patient for full view
   const [showUpdateForm, setShowUpdateForm] = useState(false) // show update form
@@ -159,13 +160,89 @@ export default function ProfessionalView({ profile }) {
         </button>
       </div>
 
-      {/* Main Content - Weekly Schedule Section with Assigned Patients */}
+      {/* Main Navigation Tabs */}
+      <div style={{
+        backgroundColor: 'white',
+        padding: '0 2rem',
+        borderBottom: '2px solid #e2e8f0',
+        display: 'flex',
+        gap: '0.5rem'
+      }}>
+        <button
+          onClick={() => setMainTab('schedule')}
+          style={{
+            padding: '1rem 1.5rem',
+            backgroundColor: mainTab === 'schedule' ? '#0ea5e9' : 'transparent',
+            color: mainTab === 'schedule' ? 'white' : '#475569',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '1rem',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          📅 Schedule
+        </button>
+        <button
+          onClick={() => setMainTab('patients')}
+          style={{
+            padding: '1rem 1.5rem',
+            backgroundColor: mainTab === 'patients' ? '#0ea5e9' : 'transparent',
+            color: mainTab === 'patients' ? 'white' : '#475569',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '1rem',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          👥 My Patients
+          <span style={{
+            backgroundColor: mainTab === 'patients' ? 'rgba(255,255,255,0.3)' : '#e2e8f0',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '12px',
+            fontSize: '0.85rem'
+          }}>
+            {patients.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setMainTab('addPatient')}
+          style={{
+            padding: '1rem 1.5rem',
+            backgroundColor: mainTab === 'addPatient' ? '#10b981' : 'transparent',
+            color: mainTab === 'addPatient' ? 'white' : '#475569',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '1rem',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          ➕ Add Patient
+        </button>
+      </div>
+
+      {/* Main Content */}
       <div style={{
         padding: '2rem',
         maxWidth: '1400px',
         margin: '0 auto'
       }}>
-        {/* Weekly Schedule Card */}
+        {/* Schedule Tab Content */}
+        {mainTab === 'schedule' && (
         <div style={{
           backgroundColor: 'white',
           borderRadius: '12px',
@@ -403,11 +480,221 @@ export default function ProfessionalView({ profile }) {
             </div>
           )}
         </div>
+        )}
+
+        {/* Patients Tab Content */}
+        {mainTab === 'patients' && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            padding: '2rem'
+          }}>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.5rem' }}>
+                👥 My Patients
+              </h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
+                View and manage your assigned patients
+              </p>
+            </div>
+
+            {/* Search Filter */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                placeholder="🔍 Search patients by name, phone, area, care type..."
+                value={patientFilter}
+                onChange={(e) => setPatientFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '1rem',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.2s'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#0ea5e9'}
+                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+              />
+              {patientFilter && (
+                <button
+                  onClick={() => setPatientFilter('')}
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#e5e7eb',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  ✕ Clear Filter
+                </button>
+              )}
+            </div>
+
+            {patients.length === 0 ? (
+              <div style={{
+                padding: '3rem',
+                backgroundColor: '#f0f9ff',
+                borderRadius: '8px',
+                border: '2px dashed #0ea5e9',
+                color: '#0c4a6e',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
+                <p style={{ fontSize: '1.1rem', margin: 0 }}>No patients assigned yet.</p>
+                <button
+                  onClick={() => setMainTab('addPatient')}
+                  style={{
+                    marginTop: '1rem',
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  ➕ Add Your First Patient
+                </button>
+              </div>
+            ) : filteredPatients.length === 0 ? (
+              <div style={{
+                padding: '2rem',
+                backgroundColor: '#fef3c7',
+                borderRadius: '8px',
+                border: '1px solid #fbbf24',
+                color: '#92400e',
+                textAlign: 'center'
+              }}>
+                <p style={{ margin: 0 }}>No patients match "{patientFilter}". Try a different search.</p>
+              </div>
+            ) : (
+              <div style={{ 
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                gap: '1.5rem'
+              }}>
+                {filteredPatients.map(patient => (
+                  <div
+                    key={patient.id}
+                    onClick={() => setSelectedPatient(patient)}
+                    style={{
+                      padding: '1.5rem',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '12px',
+                      border: '2px solid #e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      borderLeft: '4px solid #0ea5e9'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e0f2fe'
+                      e.currentTarget.style.borderColor = '#0ea5e9'
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f8fafc'
+                      e.currentTarget.style.borderColor = '#e2e8f0'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    <h3 style={{ margin: '0 0 1rem 0', color: '#0c4a6e', fontSize: '1.15rem' }}>
+                      {patient.name}
+                    </h3>
+                    
+                    <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      {patient.phone && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>📞</span> {patient.phone}
+                        </div>
+                      )}
+                      {patient.address && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>📍</span> {patient.address}
+                        </div>
+                      )}
+                      {patient.area && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>📌</span> {patient.area}
+                        </div>
+                      )}
+                      {patient.care_needed && (
+                        <div style={{ 
+                          display: 'inline-block',
+                          padding: '0.25rem 0.75rem',
+                          backgroundColor: '#dbeafe',
+                          borderRadius: '20px',
+                          fontSize: '0.85rem',
+                          color: '#0c4a6e',
+                          marginTop: '0.5rem'
+                        }}>
+                          🏥 {patient.care_needed}
+                        </div>
+                      )}
+                      {patient.scheduled_visit_date && (
+                        <div style={{ 
+                          marginTop: '0.75rem',
+                          padding: '0.75rem',
+                          backgroundColor: '#dcfce7',
+                          borderRadius: '6px',
+                          border: '1px solid #10b981'
+                        }}>
+                          <span style={{ color: '#065f46', fontWeight: '600' }}>📅 Next Visit:</span>
+                          <div style={{ color: '#065f46', marginTop: '0.25rem' }}>
+                            {new Date(patient.scheduled_visit_date).toLocaleDateString()} at {patient.scheduled_visit_time}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Add Patient Tab Content */}
+        {mainTab === 'addPatient' && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            padding: '2rem'
+          }}>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: '0 0 0.5rem 0', color: '#0c4a6e', fontSize: '1.5rem' }}>
+                ➕ Add New Patient
+              </h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>
+                Register a new patient and optionally create login credentials for them
+              </p>
+            </div>
+            
+            {profile && (
+              <AddPatient 
+                profileId={profile.id}
+                showFormByDefault={true}
+                onPatientAdded={() => {
+                  handlePatientAdded()
+                  setMainTab('patients')
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      <>
-        {/* Profile Modal */}
-        {showProfileModal && (
+      {/* Profile Modal */}
+      {showProfileModal && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -432,10 +719,7 @@ export default function ProfessionalView({ profile }) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0, color: '#0c4a6e' }}>
-                {modalTab === 'profile' && 'Your Profile'}
-                {modalTab === 'schedule' && 'Your Weekly Schedule'}
-                {modalTab === 'addPatient' && 'Add Patient'}
-                {modalTab === 'patients' && 'Your Patients'}
+                Your Profile
               </h2>
               <button
                 onClick={() => setShowProfileModal(false)}
@@ -451,277 +735,65 @@ export default function ProfessionalView({ profile }) {
               </button>
             </div>
 
-            {/* Tabs */}
-            <div style={{
-              display: 'flex',
-              gap: '0.5rem',
-              marginBottom: '1.5rem',
-              borderBottom: '2px solid #e2e8f0',
-              overflowX: 'auto'
-            }}>
+            {/* Profile Content */}
+            <div>
+              <div style={{ marginBottom: '1rem' }}>
+                <strong style={{ color: '#475569' }}>Name:</strong>
+                <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.full_name}</p>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <strong style={{ color: '#475569' }}>Email:</strong>
+                <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.email}</p>
+              </div>
+
+              {profile.phone && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <strong style={{ color: '#475569' }}>Phone:</strong>
+                  <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.phone}</p>
+                </div>
+              )}
+
+              {professionalData && (
+                <>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <strong style={{ color: '#475569' }}>Type:</strong>
+                    <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>
+                      {professionalData.kind.charAt(0).toUpperCase() + professionalData.kind.slice(1)}
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <strong style={{ color: '#475569' }}>Specialty:</strong>
+                    <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{professionalData.specialty}</p>
+                  </div>
+
+                  {professionalData.license_number && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <strong style={{ color: '#475569' }}>License Number:</strong>
+                      <p style={{ margin: '0.25rem 0 0 0', color: '#0c4a6e' }}>{professionalData.license_number}</p>
+                    </div>
+                  )}
+                </>
+              )}
+
               <button
-                onClick={() => setModalTab('profile')}
+                onClick={() => setShowProfileModal(false)}
                 style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: modalTab === 'profile' ? '#0ea5e9' : 'transparent',
-                  color: modalTab === 'profile' ? 'white' : '#475569',
+                  width: '100%',
+                  padding: '0.75rem',
+                  marginTop: '1.5rem',
+                  backgroundColor: '#0ea5e9',
+                  color: 'white',
                   border: 'none',
-                  borderRadius: '6px 6px 0 0',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap'
+                  fontWeight: '500'
                 }}
               >
-                👤 Profile
-              </button>
-              <button
-                onClick={() => setModalTab('patients')}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: modalTab === 'patients' ? '#0ea5e9' : 'transparent',
-                  color: modalTab === 'patients' ? 'white' : '#475569',
-                  border: 'none',
-                  borderRadius: '6px 6px 0 0',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                👥 Patients ({patients.length})
-              </button>
-              <button
-                onClick={() => setModalTab('addPatient')}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: modalTab === 'addPatient' ? '#0ea5e9' : 'transparent',
-                  color: modalTab === 'addPatient' ? 'white' : '#475569',
-                  border: 'none',
-                  borderRadius: '6px 6px 0 0',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                ➕ Add Patient
+                Close
               </button>
             </div>
-
-            {/* Profile Tab Content */}
-            {modalTab === 'profile' && (
-              <div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <strong style={{ color: '#475569' }}>Name:</strong>
-                  <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.full_name}</p>
-                </div>
-
-                <div style={{ marginBottom: '1rem' }}>
-                  <strong style={{ color: '#475569' }}>Email:</strong>
-                  <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.email}</p>
-                </div>
-
-                {profile.phone && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <strong style={{ color: '#475569' }}>Phone:</strong>
-                    <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{profile.phone}</p>
-                  </div>
-                )}
-
-                {professionalData && (
-                  <>
-                    <div style={{ marginBottom: '1rem' }}>
-                      <strong style={{ color: '#475569' }}>Type:</strong>
-                      <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>
-                        {professionalData.kind.charAt(0).toUpperCase() + professionalData.kind.slice(1)}
-                      </p>
-                    </div>
-
-                    <div style={{ marginBottom: '1rem' }}>
-                      <strong style={{ color: '#475569' }}>Specialty:</strong>
-                      <p style={{ margin: '0.25rem 0 0.75rem 0', color: '#0c4a6e' }}>{professionalData.specialty}</p>
-                    </div>
-
-                    {professionalData.license_number && (
-                      <div style={{ marginBottom: '1rem' }}>
-                        <strong style={{ color: '#475569' }}>License Number:</strong>
-                        <p style={{ margin: '0.25rem 0 0 0', color: '#0c4a6e' }}>{professionalData.license_number}</p>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <button
-                  onClick={() => setShowProfileModal(false)}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    marginTop: '1.5rem',
-                    backgroundColor: '#0ea5e9',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            )}
-
-            {/* Add Patient Tab Content */}
-            {modalTab === 'addPatient' && (
-              <div>
-                {profile && (
-                  <AddPatient 
-                    profileId={profile.id}
-                    onPatientAdded={() => {
-                      handlePatientAdded()
-                      setModalTab('patients')
-                    }}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Your Patients Tab Content */}
-            {modalTab === 'patients' && (
-              <div>
-                {/* Search Filter */}
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <input
-                    type="text"
-                    placeholder="🔍 Search patients by name, phone, area..."
-                    value={patientFilter}
-                    onChange={(e) => setPatientFilter(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '6px',
-                      fontSize: '0.95rem',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  {patientFilter && (
-                    <button
-                      onClick={() => setPatientFilter('')}
-                      style={{
-                        marginTop: '0.5rem',
-                        padding: '0.5rem 1rem',
-                        backgroundColor: '#e5e7eb',
-                        color: '#374151',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      Clear Filter
-                    </button>
-                  )}
-                </div>
-
-                {patients.length === 0 ? (
-                  <div style={{
-                    padding: '2rem',
-                    backgroundColor: '#f0f9ff',
-                    borderRadius: '8px',
-                    border: '1px solid #0ea5e9',
-                    color: '#0c4a6e',
-                    textAlign: 'center'
-                  }}>
-                    <p>No patients added yet. Click the "Add Patient" tab to add your first patient.</p>
-                  </div>
-                ) : filteredPatients.length === 0 ? (
-                  <div style={{
-                    padding: '1.5rem',
-                    backgroundColor: '#fef3c7',
-                    borderRadius: '8px',
-                    border: '1px solid #fbbf24',
-                    color: '#92400e',
-                    textAlign: 'center'
-                  }}>
-                    <p>No patients match "{patientFilter}". Try a different search.</p>
-                  </div>
-                ) : (
-                  <div style={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1rem',
-                    maxHeight: '50vh',
-                    overflowY: 'auto'
-                  }}>
-                    {filteredPatients.map(patient => (
-                      <div
-                        key={patient.id}
-                        onClick={() => setSelectedPatient(patient)}
-                        style={{
-                          padding: '1rem',
-                          backgroundColor: '#f8fafc',
-                          borderRadius: '8px',
-                          border: '1px solid #e2e8f0',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          ':hover': { backgroundColor: '#e0f2fe' }
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0f2fe'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                      >
-                        <h4 style={{ margin: '0 0 0.75rem 0', color: '#0c4a6e', fontSize: '1rem' }}>
-                          {patient.name}
-                        </h4>
-                        
-                        <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.875rem' }}>
-                          {patient.phone && (
-                            <div>
-                              <span style={{ color: '#64748b' }}>📞</span> {patient.phone}
-                            </div>
-                          )}
-                          {patient.address && (
-                            <div>
-                              <span style={{ color: '#64748b' }}>📍</span> {patient.address}
-                            </div>
-                          )}
-                          {patient.area && (
-                            <div>
-                              <span style={{ color: '#64748b' }}>📌</span> {patient.area}
-                            </div>
-                          )}
-                          {patient.care_needed && (
-                            <div>
-                              <span style={{ color: '#64748b' }}>🏥</span> {patient.care_needed}
-                            </div>
-                          )}
-                          {patient.scheduled_visit_date && (
-                            <div style={{ 
-                              padding: '0.5rem',
-                              backgroundColor: '#dbeafe',
-                              borderRadius: '4px',
-                              border: '1px solid #0ea5e9'
-                            }}>
-                              <span style={{ color: '#0c4a6e', fontWeight: 'bold' }}>📅 Scheduled Visit:</span> {new Date(patient.scheduled_visit_date).toLocaleDateString()} at {patient.scheduled_visit_time}
-                            </div>
-                          )}
-                          {patient.service_area && (
-                            <div style={{ 
-                              padding: '0.5rem',
-                              backgroundColor: '#f0f9ff',
-                              borderRadius: '4px',
-                              border: '1px solid #7dd3fc'
-                            }}>
-                              <span style={{ color: '#0c4a6e', fontWeight: 'bold' }}>🏘️ Visit Area:</span> {patient.service_area}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1050,7 +1122,6 @@ export default function ProfessionalView({ profile }) {
           </div>
         </div>
       )}
-      </>
     </div>
   )
 }

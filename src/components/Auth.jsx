@@ -14,16 +14,17 @@ const PROFESSIONAL_SPECIALTIES = [
 ]
 
 export default function Auth({ onUser }) {
-  const [mode, setMode] = useState('signin') // 'signin' | 'signup'
+  const [mode, setMode] = useState('signin') // 'signin' | 'signup' | 'resetPassword'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   
   // signup fields
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
-  const [role, setRole] = useState('patient')
+  const [role, setRole] = useState('professional') // Default to professional since patients can't signup
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
+  const [resetEmailSent, setResetEmailSent] = useState(false)
   
   // role-specific fields
   const [address, setAddress] = useState('') // for patients
@@ -62,6 +63,34 @@ export default function Auth({ onUser }) {
       console.error('Sign in exception:', err)
       setMessage(err.message || 'Sign in failed. Please check your credentials.')
     } finally { setLoading(false) }
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+    
+    if (!email || email.trim() === '') {
+      setMessage('Please enter your email address')
+      setLoading(false)
+      return
+    }
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      
+      if (error) throw error
+      
+      setResetEmailSent(true)
+      setMessage('Password reset email sent! Please check your inbox.')
+    } catch (err) {
+      console.error('Password reset error:', err)
+      setMessage(err.message || 'Failed to send reset email. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleSignUp(e) {
@@ -143,117 +172,462 @@ export default function Auth({ onUser }) {
 
   return (
     <div style={{ marginTop: 20, maxWidth: 500 }}>
+      {/* Mode selection - Sign in or Sign up (for staff only) */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        <button onClick={() => setMode('signin')} className={mode==='signin'?'active':''}>Sign in</button>
-        <button onClick={() => setMode('signup')} className={mode==='signup'?'active':''}>Sign up</button>
+        <button 
+          onClick={() => { setMode('signin'); setMessage(null); setResetEmailSent(false); }} 
+          style={{
+            padding: '10px 20px',
+            backgroundColor: mode === 'signin' ? '#0ea5e9' : '#e2e8f0',
+            color: mode === 'signin' ? 'white' : '#475569',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          Sign in
+        </button>
+        <button 
+          onClick={() => { setMode('signup'); setMessage(null); }} 
+          style={{
+            padding: '10px 20px',
+            backgroundColor: mode === 'signup' ? '#0ea5e9' : '#e2e8f0',
+            color: mode === 'signup' ? 'white' : '#475569',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          Staff Sign up
+        </button>
       </div>
 
-      <form onSubmit={mode==='signin' ? handleSignIn : handleSignUp}>
-        <label style={{ display: 'block', marginBottom: 6 }}>Email</label>
-        <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required style={{ width: '100%', padding: 6 }} />
-
-        <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>Password</label>
-        <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required style={{ width: '100%', padding: 6 }} />
-
-        {mode === 'signup' && (
-          <>
-            <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>Full name</label>
-            <input value={fullName} onChange={e=>setFullName(e.target.value)} required style={{ width: '100%', padding: 6 }} />
-
-            <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>Phone</label>
-            <input value={phone} onChange={e=>setPhone(e.target.value)} style={{ width: '100%', padding: 6 }} />
-
-            <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>Role</label>
-            <select value={role} onChange={e=>setRole(e.target.value)} style={{ width: '100%', padding: 6 }}>
-              <option value="patient">Patient</option>
-              <option value="professional">Professional (Doctor/Nurse)</option>
-              <option value="coordinator">Coordinator</option>
-              <option value="supervisor">Supervisor</option>
-            </select>
-
-            {/* PATIENT-SPECIFIC FIELDS */}
-            {role === 'patient' && (
-              <>
-                <label style={{ display: 'block', marginTop: 12, marginBottom: 6 }}>
-                  <strong>Address (home)</strong>
-                </label>
-                <textarea
-                  value={address}
-                  onChange={e=>setAddress(e.target.value)}
-                  placeholder="e.g., House 12, Street Name, City"
-                  style={{ width: '100%', padding: 6, minHeight: 60, fontFamily: 'inherit' }}
-                />
-              </>
-            )}
-
-            {/* PROFESSIONAL-SPECIFIC FIELDS */}
-            {role === 'professional' && (
-              <>
-                <label style={{ display: 'block', marginTop: 12, marginBottom: 6 }}>
-                  <strong>Professional Type</strong>
-                </label>
-                <select value={professionalKind} onChange={e=>setProfessionalKind(e.target.value)} style={{ width: '100%', padding: 6 }}>
-                  <option value="doctor">Doctor</option>
-                  <option value="nurse">Nurse</option>
-                  <option value="therapist">Therapist</option>
-                  <option value="counselor">Counselor</option>
-                  <option value="other">Other</option>
-                </select>
-
-                <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>
-                  <strong>Specialty</strong>
-                </label>
-                <select value={specialty} onChange={e=>setSpecialty(e.target.value)} style={{ width: '100%', padding: 6 }}>
-                  {PROFESSIONAL_SPECIALTIES.map(spec => (
-                    <option key={spec} value={spec}>{spec}</option>
-                  ))}
-                </select>
-
-                {specialty === 'Other (please specify)' && (
-                  <>
-                    <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>Please specify your specialty</label>
-                    <input
-                      type="text"
-                      value={otherSpecialty}
-                      onChange={e=>setOtherSpecialty(e.target.value)}
-                      placeholder="e.g., Dental Hygiene"
-                      style={{ width: '100%', padding: 6 }}
-                    />
-                  </>
-                )}
-
-                <label style={{ display: 'block', marginTop: 8, marginBottom: 6 }}>License Number (optional)</label>
-                <input
-                  type="text"
-                  value={licenseNumber}
-                  onChange={e=>setLicenseNumber(e.target.value)}
-                  placeholder="e.g., LIC-001-2024"
-                  style={{ width: '100%', padding: 6 }}
-                />
-              </>
-            )}
-          </>
-        )}
-
-        <div style={{ marginTop: 12 }}>
-          <button type="submit" disabled={loading} style={{ width: '100%', padding: 8, cursor: 'pointer' }}>
-            {loading ? 'Please wait...' : (mode==='signin' ? 'Sign in' : 'Create account')}
-          </button>
+      {/* Password Reset Mode */}
+      {mode === 'resetPassword' && (
+        <div style={{ 
+          padding: '1.5rem', 
+          backgroundColor: '#f0f9ff', 
+          borderRadius: '8px',
+          border: '1px solid #0ea5e9'
+        }}>
+          <h3 style={{ margin: '0 0 1rem 0', color: '#0c4a6e' }}>🔐 Reset Password</h3>
+          
+          {resetEmailSent ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📧</div>
+              <p style={{ color: '#065f46', marginBottom: '1rem' }}>
+                Password reset email sent!<br />
+                Please check your inbox and follow the instructions.
+              </p>
+              <button
+                onClick={() => { setMode('signin'); setResetEmailSent(false); setMessage(null); }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#0ea5e9',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Back to Sign in
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleResetPassword}>
+              <p style={{ color: '#475569', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: '500' }}>Email</label>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                required 
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }} 
+                placeholder="Enter your email"
+              />
+              
+              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    padding: '10px 20px',
+                    backgroundColor: loading ? '#cbd5e1' : '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  {loading ? 'Sending...' : 'Send Reset Link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signin'); setMessage(null); }}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#475569',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              
+              {message && (
+                <p style={{ 
+                  marginTop: '1rem', 
+                  padding: '0.75rem',
+                  borderRadius: '6px',
+                  backgroundColor: message.includes('sent') ? '#dcfce7' : '#fee2e2',
+                  color: message.includes('sent') ? '#065f46' : '#991b1b'
+                }}>
+                  {message}
+                </p>
+              )}
+            </form>
+          )}
         </div>
-      </form>
+      )}
 
-      {message && <p style={{ marginTop: 12, color: message.includes('success') ? 'green' : 'red' }}>{message}</p>}
-      
-      {/* Diagnostic info for email confirmation */}
-      <div style={{ marginTop: 20, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 4, fontSize: 12 }}>
-        <p><strong>Troubleshooting:</strong></p>
-        <ul style={{ marginTop: 8 }}>
-          <li>Make sure email and password are correct (case-sensitive)</li>
-          <li>If you just signed up, you may need to confirm your email first</li>
-          <li>Check browser console (F12) for detailed error messages</li>
-          <li>Try signing up again and check for a confirmation email</li>
-        </ul>
-      </div>
+      {/* Sign In Form */}
+      {mode === 'signin' && (
+        <form onSubmit={handleSignIn}>
+          <label style={{ display: 'block', marginBottom: 6, fontWeight: '500' }}>Email</label>
+          <input 
+            type="email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            required 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+            placeholder="Enter your email"
+          />
+
+          <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>Password</label>
+          <input 
+            type="password" 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            required 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+            placeholder="Enter your password"
+          />
+
+          <div style={{ marginTop: '1rem' }}>
+            <button 
+              type="submit" 
+              disabled={loading} 
+              style={{ 
+                width: '100%', 
+                padding: '12px', 
+                backgroundColor: loading ? '#cbd5e1' : '#0ea5e9',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+                fontSize: '1rem'
+              }}
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </button>
+          </div>
+          
+          {/* Forgot Password Link */}
+          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => { setMode('resetPassword'); setMessage(null); }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#0ea5e9',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '0.9rem'
+              }}
+            >
+              Forgot your password?
+            </button>
+          </div>
+          
+          {message && (
+            <p style={{ 
+              marginTop: '1rem', 
+              padding: '0.75rem',
+              borderRadius: '6px',
+              backgroundColor: message.includes('success') || message.includes('Signed in') ? '#dcfce7' : '#fee2e2',
+              color: message.includes('success') || message.includes('Signed in') ? '#065f46' : '#991b1b'
+            }}>
+              {message}
+            </p>
+          )}
+          
+          {/* Info box for patients */}
+          <div style={{ 
+            marginTop: '1.5rem', 
+            padding: '1rem', 
+            backgroundColor: '#fef3c7', 
+            borderRadius: '8px',
+            border: '1px solid #fbbf24',
+            fontSize: '0.85rem'
+          }}>
+            <p style={{ margin: 0, color: '#92400e' }}>
+              <strong>👤 Patients:</strong> Your login credentials are provided by your healthcare professional. 
+              If you don't have login details, please contact your care provider.
+            </p>
+          </div>
+        </form>
+      )}
+
+      {/* Sign Up Form (Staff Only) */}
+      {mode === 'signup' && (
+        <form onSubmit={handleSignUp}>
+          <div style={{ 
+            marginBottom: '1rem', 
+            padding: '0.75rem', 
+            backgroundColor: '#dbeafe', 
+            borderRadius: '6px',
+            border: '1px solid #3b82f6'
+          }}>
+            <p style={{ margin: 0, color: '#1e40af', fontSize: '0.85rem' }}>
+              <strong>ℹ️ Staff Registration:</strong> This form is for healthcare professionals, coordinators, and supervisors only. 
+              Patients receive their login credentials from their healthcare provider.
+            </p>
+          </div>
+
+          <label style={{ display: 'block', marginBottom: 6, fontWeight: '500' }}>Email</label>
+          <input 
+            type="email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            required 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+          />
+
+          <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>Password</label>
+          <input 
+            type="password" 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            required 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+          />
+
+          <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>Full name</label>
+          <input 
+            value={fullName} 
+            onChange={e => setFullName(e.target.value)} 
+            required 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+          />
+
+          <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>Phone</label>
+          <input 
+            value={phone} 
+            onChange={e => setPhone(e.target.value)} 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }} 
+          />
+
+          <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>Role</label>
+          <select 
+            value={role} 
+            onChange={e => setRole(e.target.value)} 
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              boxSizing: 'border-box'
+            }}
+          >
+            <option value="professional">Professional (Doctor/Nurse)</option>
+            <option value="coordinator">Coordinator</option>
+            <option value="supervisor">Supervisor</option>
+          </select>
+
+          {/* PROFESSIONAL-SPECIFIC FIELDS */}
+          {role === 'professional' && (
+            <>
+              <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>
+                Professional Type
+              </label>
+              <select 
+                value={professionalKind} 
+                onChange={e => setProfessionalKind(e.target.value)} 
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="doctor">Doctor</option>
+                <option value="nurse">Nurse</option>
+                <option value="therapist">Therapist</option>
+                <option value="counselor">Counselor</option>
+                <option value="other">Other</option>
+              </select>
+
+              <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>
+                Specialty
+              </label>
+              <select 
+                value={specialty} 
+                onChange={e => setSpecialty(e.target.value)} 
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {PROFESSIONAL_SPECIALTIES.map(spec => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
+
+              {specialty === 'Other (please specify)' && (
+                <>
+                  <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>
+                    Please specify your specialty
+                  </label>
+                  <input
+                    type="text"
+                    value={otherSpecialty}
+                    onChange={e => setOtherSpecialty(e.target.value)}
+                    placeholder="e.g., Dental Hygiene"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </>
+              )}
+
+              <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: '500' }}>
+                License Number (optional)
+              </label>
+              <input
+                type="text"
+                value={licenseNumber}
+                onChange={e => setLicenseNumber(e.target.value)}
+                placeholder="e.g., LIC-001-2024"
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </>
+          )}
+
+          <div style={{ marginTop: '1.5rem' }}>
+            <button 
+              type="submit" 
+              disabled={loading} 
+              style={{ 
+                width: '100%', 
+                padding: '12px', 
+                backgroundColor: loading ? '#cbd5e1' : '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+                fontSize: '1rem'
+              }}
+            >
+              {loading ? 'Creating account...' : 'Create Staff Account'}
+            </button>
+          </div>
+          
+          {message && (
+            <p style={{ 
+              marginTop: '1rem', 
+              padding: '0.75rem',
+              borderRadius: '6px',
+              backgroundColor: message.includes('success') || message.includes('complete') ? '#dcfce7' : '#fee2e2',
+              color: message.includes('success') || message.includes('complete') ? '#065f46' : '#991b1b'
+            }}>
+              {message}
+            </p>
+          )}
+        </form>
+      )}
     </div>
   )
 }
