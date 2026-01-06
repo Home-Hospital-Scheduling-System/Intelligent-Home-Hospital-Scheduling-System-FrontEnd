@@ -34,9 +34,21 @@ export default function Auth({ onUser }) {
   const [licenseNumber, setLicenseNumber] = useState('')
 
   useEffect(() => {
+    let currentUserId = null
+    
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      // when auth state changes, notify parent to refresh
-      onUser(session?.user ?? null)
+      // Ignore token refresh events - they happen when switching browser tabs
+      // and shouldn't cause UI refresh
+      if (event === 'TOKEN_REFRESHED') {
+        return
+      }
+      
+      const newUserId = session?.user?.id || null
+      // Only notify parent if user actually changed
+      if (newUserId !== currentUserId) {
+        currentUserId = newUserId
+        onUser(session?.user ?? null)
+      }
     })
     return () => listener?.subscription?.unsubscribe && listener.subscription.unsubscribe()
   }, [onUser])
