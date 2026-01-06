@@ -3,8 +3,11 @@ import { supabase } from '../lib/supabaseClient'
 import AssignPatient from './AssignPatient'
 import { findBestMatches, autoAssignPatient, generateAssignmentSuggestions } from '../lib/aiAssignmentEngine'
 import { findBestAssignmentWithTimeSlots, calculateAvailableTimeSlots } from '../lib/timeSlotOptimizer'
+import { useNotification, useConfirm } from './Notification'
 
 export default function PatientAssignmentManager({ profile }) {
+  const notify = useNotification()
+  const confirm = useConfirm()
   const [unassignedPatients, setUnassignedPatients] = useState([])
   const [assignedPatients, setAssignedPatients] = useState([])
   const [assignmentDetails, setAssignmentDetails] = useState({}) // Map patient_id -> assignment info with professional
@@ -193,7 +196,7 @@ export default function PatientAssignmentManager({ profile }) {
       
       // Get the new professional's name for the success message
       const newProf = allProfessionals.find(p => p.id === newProfessionalId)
-      alert(`✓ Patient successfully reassigned to ${newProf?.profiles?.full_name || 'new professional'}!`)
+      notify.patientReassigned(reassignPatient.name, newProf?.profiles?.full_name || 'new professional')
       
     } catch (err) {
       setError('Failed to reassign patient: ' + err.message)
@@ -267,13 +270,16 @@ export default function PatientAssignmentManager({ profile }) {
         setShowAssignForm(false)
         setShowAiMatches(false)
         setSelectedPatient(null)
-        // Show success message with match details
-        setTimeout(() => {
-          const clusteringInfo = result.matchDetails.clusteringBonus > 0 
-            ? `\n🗺️ Geographic Clustering: +${result.matchDetails.clusteringBonus} pts` 
-            : ''
-          alert(`✓ Patient assigned to ${result.matchDetails.professional}!\n\nMatch Score: ${result.matchDetails.finalScore}%\nSkill: ${result.matchDetails.skillMatch}% | Availability: ${result.matchDetails.availability}% | Location: ${result.matchDetails.areaMatch}%${clusteringInfo}\n\n${result.matchDetails.reasoning}`)
-        }, 100)
+        // Show success notification with match details
+        const clusteringInfo = result.matchDetails.clusteringBonus > 0 
+          ? `Geographic Clustering: +${result.matchDetails.clusteringBonus} pts` 
+          : ''
+        notify.patientAssigned(
+          selectedPatient.name,
+          result.matchDetails.professional,
+          result.matchDetails.finalScore,
+          `Skill: ${result.matchDetails.skillMatch}% | Availability: ${result.matchDetails.availability}%${clusteringInfo ? ' | ' + clusteringInfo : ''}`
+        )
       } else {
         setError('Failed to auto-assign: ' + result.message)
       }
@@ -291,9 +297,8 @@ export default function PatientAssignmentManager({ profile }) {
       return
     }
 
-    if (!window.confirm(`Auto-assign all ${unassignedPatients.length} unassigned patients using AI?\n\nThis will match each patient to the best available professional based on skills, availability, and location.`)) {
-      return
-    }
+    const confirmed = await confirm.bulkAssign(unassignedPatients.length)
+    if (!confirmed) return
 
     try {
       setAiLoading(true)
@@ -323,7 +328,7 @@ export default function PatientAssignmentManager({ profile }) {
       }
       
       loadPatients()
-      alert(`✓ Bulk Assignment Complete!\n\nSuccessfully assigned: ${successCount}\nFailed: ${failCount}`)
+      notify.bulkOperation(successCount, failCount, 'Assignment')
     } catch (err) {
       setError('Error during bulk assignment: ' + err.message)
     } finally {
@@ -333,9 +338,8 @@ export default function PatientAssignmentManager({ profile }) {
 
   // Unassign a patient (move back to unassigned list)
   async function handleUnassignPatient(patientId, patientName) {
-    if (!window.confirm(`Are you sure you want to unassign ${patientName}?\n\nThis will remove them from their assigned professional and make them available for reassignment.`)) {
-      return
-    }
+    const confirmed = await confirm.unassignPatient(patientName)
+    if (!confirmed) return
 
     try {
       setUnassigning(true)
@@ -353,7 +357,7 @@ export default function PatientAssignmentManager({ profile }) {
       // Reload patients to update lists
       await loadPatients()
       setError('')
-      alert(`✓ ${patientName} has been unassigned and is now available for reassignment`)
+      notify.patientUnassigned(patientName)
     } catch (err) {
       setError('Failed to unassign patient: ' + err.message)
     } finally {
@@ -368,9 +372,8 @@ export default function PatientAssignmentManager({ profile }) {
       return
     }
 
-    if (!window.confirm(`Unassign ALL ${assignedPatients.length} assigned patients?\n\nThis will make all of them available for reassignment. This action is reversible.`)) {
-      return
-    }
+    const confirmed = await confirm.bulkUnassign(assignedPatients.length)
+    if (!confirmed) return
 
     try {
       setUnassigning(true)
@@ -386,7 +389,7 @@ export default function PatientAssignmentManager({ profile }) {
 
       // Reload patients
       await loadPatients()
-      alert(`✓ All patients have been unassigned and are now available for reassignment`)
+      notify.bulkOperation(assignedPatients.length, 0, 'Unassignment')
     } catch (err) {
       setError('Failed to unassign patients: ' + err.message)
     } finally {
@@ -1159,12 +1162,16 @@ export default function PatientAssignmentManager({ profile }) {
                       const bestMatch = matches[0]
                       const select = document.getElementById('newProfessional')
                       if (select) select.value = bestMatch.professional_id
-                      alert(`🤖 AI Recommendation: ${bestMatch.professional_name}\n\nMatch Score: ${bestMatch.finalScore}%\n${bestMatch.reasoning}`)
+                      notify.ai(
+                        `AI Recommendation: ${bestMatch.professional_name}`,
+                        `Match Score: ${bestMatch.finalScore}%`,
+                        { details: bestMatch.reasoning, duration: 8000 }
+                      )
                     } else {
-                      alert('No suitable professionals found for this patient.')
+                      notify.warning('No Match Found', 'No suitable professionals found for this patient.')
                     }
                   } catch (err) {
-                    alert('Error getting AI recommendation: ' + err.message)
+                    notify.error('AI Error', 'Error getting AI recommendation: ' + err.message)
                   } finally {
                     setAiLoading(false)
                   }
@@ -1206,14 +1213,15 @@ export default function PatientAssignmentManager({ profile }) {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const select = document.getElementById('newProfessional')
                   const newProfId = select?.value
                   if (!newProfId) {
-                    alert('Please select a professional')
+                    notify.warning('Selection Required', 'Please select a professional')
                     return
                   }
-                  if (window.confirm(`Reassign ${reassignPatient.name} to the selected professional?`)) {
+                  const confirmed = await confirm.reassignPatient(reassignPatient.name)
+                  if (confirmed) {
                     handleReassignPatient(reassignPatient.id, parseInt(newProfId))
                   }
                 }}

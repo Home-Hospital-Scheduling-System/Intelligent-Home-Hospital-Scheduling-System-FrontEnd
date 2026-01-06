@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useNotification } from './Notification'
 
 // Password validation helper
 function validatePassword(password) {
@@ -99,6 +100,7 @@ const AREA_OPTIONS = [
 ]
 
 export default function AddPatient({ profileId, onPatientAdded, showFormByDefault = false }) {
+  const notify = useNotification()
   const [showForm, setShowForm] = useState(showFormByDefault)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -394,7 +396,7 @@ export default function AddPatient({ profileId, onPatientAdded, showFormByDefaul
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(`Email: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`)
-                  alert('Credentials copied to clipboard!')
+                  notify.success('Copied!', 'Credentials copied to clipboard')
                 }}
                 style={{
                   marginTop: '1rem',

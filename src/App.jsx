@@ -6,8 +6,9 @@ import PatientView from './components/PatientView'
 import ProfessionalView from './components/ProfessionalView'
 import SupervisorDashboard from './components/SupervisorDashboard'
 import PatientAssignmentManager from './components/PatientAssignmentManager'
+import { NotificationProvider } from './components/Notification'
 
-export default function App() {
+function AppContent() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
 
@@ -137,5 +138,14 @@ export default function App() {
         )}
       </main>
     </div>
+  )
+}
+
+// Wrap AppContent with NotificationProvider
+export default function App() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
   )
 }
