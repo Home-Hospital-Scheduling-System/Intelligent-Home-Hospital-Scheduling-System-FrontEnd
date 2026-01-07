@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
+import { apiGet, apiPost } from './lib/apiClient'
 import Auth from './components/Auth'
 import CoordinatorSchedules from './components/CoordinatorSchedules'
 import PatientView from './components/PatientView'
@@ -49,51 +50,56 @@ function AppContent() {
   async function loadProfile(user) {
     if (!user) return
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).limit(1).single()
-      if (error || !data) {
-        // no profile yet — check if we have pending signup info in localStorage (email-keyed)
-        try {
-          const pendingRaw = localStorage.getItem('hhss_pending_profile_' + (user.email || ''))
-          if (pendingRaw) {
-            const pending = JSON.parse(pendingRaw)
-            const profile = { id: user.id, full_name: pending.fullName, email: user.email, phone: pending.phone || null, role: pending.role }
-            const { error: pErr } = await supabase.from('profiles').insert(profile)
-            if (!pErr) {
-              // create patient row when role=patient
-              if (pending.role === 'patient') {
-                const patientData = { profile_id: user.id, address: pending.address || null, medical_notes: '' }
-                console.log('Inserting pending patient:', patientData)
-                const { error: patErr, data: patData } = await supabase.from('patients').insert(patientData)
-                if (patErr) {
-                  console.warn('Pending patient insert error:', patErr.message)
-                } else {
-                  console.log('Pending patient inserted successfully:', patData)
-                }
-              }
-              // create professional row when role=professional
-              if (pending.role === 'professional') {
-                const professionalData = { profile_id: user.id, kind: pending.professionalKind || 'nurse', specialty: pending.specialty || '', license_number: pending.licenseNumber || null }
-                console.log('Inserting pending professional:', professionalData)
-                const { error: proErr, data: proData } = await supabase.from('professionals').insert(professionalData)
-                if (proErr) {
-                  console.warn('Pending professional insert error:', proErr.message)
-                } else {
-                  console.log('Pending professional inserted successfully:', proData)
-                }
-              }
-              localStorage.removeItem('hhss_pending_profile_' + (user.email || ''))
-              setProfile(profile)
-              return
-            }
-          }
-        } catch (e) {
-          console.warn('error creating pending profile', e)
-        }
-        setProfile(null)
-      } else {
+      // Try to fetch profile from backend
+      try {
+        const data = await apiGet('/api/auth/profile')
         setProfile(data)
+        return
+      } catch (backendErr) {
+        console.log('Backend profile fetch failed, checking localStorage for pending profile:', backendErr.message)
       }
+
+      // If backend fetch fails, check if we have pending signup info in localStorage
+      try {
+        const pendingRaw = localStorage.getItem('hhss_pending_profile_' + (user.email || ''))
+        if (pendingRaw) {
+          const pending = JSON.parse(pendingRaw)
+          const profile = { id: user.id, full_name: pending.fullName, email: user.email, phone: pending.phone || null, role: pending.role }
+          const { error: pErr } = await supabase.from('profiles').insert(profile)
+          if (!pErr) {
+            // create patient row when role=patient
+            if (pending.role === 'patient') {
+              const patientData = { profile_id: user.id, address: pending.address || null, medical_notes: '' }
+              console.log('Inserting pending patient:', patientData)
+              const { error: patErr, data: patData } = await supabase.from('patients').insert(patientData)
+              if (patErr) {
+                console.warn('Pending patient insert error:', patErr.message)
+              } else {
+                console.log('Pending patient inserted successfully:', patData)
+              }
+            }
+            // create professional row when role=professional
+            if (pending.role === 'professional') {
+              const professionalData = { profile_id: user.id, kind: pending.professionalKind || 'nurse', specialty: pending.specialty || '', license_number: pending.licenseNumber || null }
+              console.log('Inserting pending professional:', professionalData)
+              const { error: proErr, data: proData } = await supabase.from('professionals').insert(professionalData)
+              if (proErr) {
+                console.warn('Pending professional insert error:', proErr.message)
+              } else {
+                console.log('Pending professional inserted successfully:', proData)
+              }
+            }
+            localStorage.removeItem('hhss_pending_profile_' + (user.email || ''))
+            setProfile(profile)
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('error creating pending profile', e)
+      }
+      setProfile(null)
     } catch (e) {
+      console.warn('loadProfile error:', e)
       setProfile(null)
     }
   }

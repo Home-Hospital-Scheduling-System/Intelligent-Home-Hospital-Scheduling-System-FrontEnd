@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { apiGet, apiPost, apiDelete, apiPatch } from '../lib/apiClient'
 import AssignPatient from './AssignPatient'
 import { findBestMatches, autoAssignPatient, generateAssignmentSuggestions } from '../lib/aiAssignmentEngine'
 import { findBestAssignmentWithTimeSlots, calculateAvailableTimeSlots } from '../lib/timeSlotOptimizer'
@@ -39,36 +40,11 @@ export default function PatientAssignmentManager({ profile }) {
       setLoading(true)
       setError('')
 
-      // Get all patients
-      const { data: allPatients, error: patientsError } = await supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false })
+      // Get all patients via backend
+      const allPatients = await apiGet('/api/patients')
 
-      if (patientsError) throw patientsError
-
-      // Get assigned patients with professional details
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from('patient_assignments')
-        .select(`
-          id,
-          patient_id,
-          professional_id,
-          scheduled_visit_date,
-          scheduled_visit_time,
-          service_area,
-          status,
-          match_score,
-          professionals(
-            id,
-            kind,
-            specialty,
-            profiles(full_name, phone)
-          )
-        `)
-        .eq('status', 'active')
-
-      if (assignmentsError) throw assignmentsError
+      // Get assigned patients with professional details via backend
+      const assignments = await apiGet('/api/assignments?status=active')
 
       // Build assignment details map
       const detailsMap = {}
@@ -104,16 +80,7 @@ export default function PatientAssignmentManager({ profile }) {
 
   async function loadSpecializations() {
     try {
-      const { data, error } = await supabase
-        .from('professional_specializations')
-        .select('specialization')
-      
-      if (error) {
-        console.error('Error fetching specializations:', error)
-        return
-      }
-
-      // Get unique specializations
+      const data = await apiGet('/api/professionals/specializations')
       const uniqueSpecs = [...new Set(data?.map(s => s.specialization) || [])]
       setAllSpecializations(uniqueSpecs.sort())
     } catch (err) {
@@ -124,25 +91,7 @@ export default function PatientAssignmentManager({ profile }) {
   // Load all active professionals for reassignment dropdown
   async function loadAllProfessionals() {
     try {
-      const { data, error } = await supabase
-        .from('professionals')
-        .select(`
-          id,
-          kind,
-          specialty,
-          max_patients,
-          current_patient_count,
-          is_active,
-          profiles(full_name)
-        `)
-        .eq('is_active', true)
-        .order('current_patient_count', { ascending: true })
-
-      if (error) {
-        console.error('Error fetching professionals:', error)
-        return
-      }
-
+      const data = await apiGet('/api/professionals')
       setAllProfessionals(data || [])
     } catch (err) {
       console.error('Error in loadAllProfessionals:', err)
@@ -163,29 +112,11 @@ export default function PatientAssignmentManager({ profile }) {
         return
       }
 
-      // Update the assignment with new professional
-      const { error: updateError } = await supabase
-        .from('patient_assignments')
-        .update({ 
-          professional_id: newProfessionalId,
-          assignment_date: new Date().toISOString(),
-          assigned_by_id: profile.id
-        })
-        .eq('id', assignment.assignmentId)
-
-      if (updateError) throw updateError
-
-      // Update patient counts - decrement old professional
-      await supabase
-        .from('professionals')
-        .update({ current_patient_count: supabase.rpc('decrement_count') })
-        .eq('id', assignment.professionalId)
-
-      // Increment new professional
-      await supabase
-        .from('professionals')
-        .update({ current_patient_count: supabase.rpc('increment_count') })
-        .eq('id', newProfessionalId)
+      // Reassign via backend
+      await apiPost(`/api/assignments/${assignment.assignmentId}/reassign`, {
+        new_professional_id: newProfessionalId,
+        reason: 'Manual reassignment by coordinator'
+      })
 
       // Reload patients to refresh the view
       await loadPatients()
@@ -212,16 +143,7 @@ export default function PatientAssignmentManager({ profile }) {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('professional_specializations')
-        .select('professional_id, professionals(id, kind, specialty, profiles(full_name))')
-        .eq('specialization', skill)
-
-      if (error) {
-        console.error('Error fetching professionals with skill:', error)
-        return
-      }
-
+      const data = await apiGet(`/api/professionals/by-skill/${skill}`)
       setProfessionalsWithSkill(data || [])
     } catch (err) {
       console.error('Error in loadProfessionalsWithSkill:', err)
