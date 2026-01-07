@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { apiGet, apiPost, apiDelete, apiPatch } from '../lib/apiClient'
 import AssignPatient from './AssignPatient'
 import { findBestMatches, autoAssignPatient, generateAssignmentSuggestions } from '../lib/aiAssignmentEngine'
-import { findBestAssignmentWithTimeSlots, calculateAvailableTimeSlots } from '../lib/timeSlotOptimizer'
+import { findBestAssignmentWithTimeSlots, calculateAvailableTimeSlots, smartAssignPatient } from '../lib/timeSlotOptimizer'
 import { useNotification, useConfirm } from './Notification'
 
 export default function PatientAssignmentManager({ profile }) {
@@ -180,38 +180,78 @@ export default function PatientAssignmentManager({ profile }) {
     }
   }
 
-  // AI: Auto-assign the patient to best match
-  async function handleAutoAssign(matchProfessionalId) {
+  // AI: Auto-assign flow
+  // Supports two modes:
+  // 1) Quick assign from list: arg is a patientId; selects and auto-assigns best match
+  // 2) Assign specific professional from AI matches: arg is a professionalId for current selectedPatient
+  async function handleAutoAssign(arg) {
     try {
       setAiLoading(true)
-      if (!selectedPatient) {
-        setError('No patient selected')
-        return
-      }
+
       if (!profile || !profile.id) {
         setError('Coordinator profile not loaded yet. Please wait a moment and try again.')
         return
       }
-      const result = await autoAssignPatient(selectedPatient.id, profile.id)
-      
-      if (result.success) {
-        setError('')
-        loadPatients()
-        setShowAssignForm(false)
-        setShowAiMatches(false)
-        setSelectedPatient(null)
-        // Show success notification with match details
-        const clusteringInfo = result.matchDetails.clusteringBonus > 0 
-          ? `Geographic Clustering: +${result.matchDetails.clusteringBonus} pts` 
-          : ''
-        notify.patientAssigned(
-          selectedPatient.name,
-          result.matchDetails.professional,
-          result.matchDetails.finalScore,
-          `Skill: ${result.matchDetails.skillMatch}% | Availability: ${result.matchDetails.availability}%${clusteringInfo ? ' | ' + clusteringInfo : ''}`
-        )
+
+      let patient = selectedPatient
+      let professionalId = null
+
+      // If no selected patient and arg is provided, treat it as patientId from list
+      if (!patient && typeof arg === 'number') {
+        patient = unassignedPatients.find(p => p.id === arg) || null
+        if (patient) {
+          setSelectedPatient(patient)
+        }
+      }
+
+      if (!patient) {
+        setError('No patient selected')
+        return
+      }
+
+      // If selectedPatient exists and arg is a professionalId, assign to that professional
+      if (patient && typeof arg === 'number' && selectedPatient && selectedPatient.id === patient.id) {
+        professionalId = arg
+      }
+
+      if (professionalId) {
+        const result = await smartAssignPatient(patient.id, professionalId, profile.id)
+        if (result.success) {
+          setError('')
+          await loadPatients()
+          setShowAssignForm(false)
+          setShowAiMatches(false)
+          setSelectedPatient(null)
+          notify.patientAssigned(
+            patient.name,
+            `Professional #${professionalId}`,
+            0,
+            `Scheduled on ${result.scheduledDetails?.date} at ${result.scheduledDetails?.time}`
+          )
+        } else {
+          setError('Failed to assign to selected professional: ' + (result.error || 'Unknown error'))
+        }
       } else {
-        setError('Failed to auto-assign: ' + result.message)
+        // Default: auto-assign best match
+        const result = await autoAssignPatient(patient.id, profile.id)
+        if (result.success) {
+          setError('')
+          await loadPatients()
+          setShowAssignForm(false)
+          setShowAiMatches(false)
+          setSelectedPatient(null)
+          const clusteringInfo = result.matchDetails.clusteringBonus > 0 
+            ? `Geographic Clustering: +${result.matchDetails.clusteringBonus} pts` 
+            : ''
+          notify.patientAssigned(
+            patient.name,
+            result.matchDetails.professional,
+            result.matchDetails.finalScore,
+            `Skill: ${result.matchDetails.skillMatch}% | Availability: ${result.matchDetails.availability}%${clusteringInfo ? ' | ' + clusteringInfo : ''}`
+          )
+        } else {
+          setError('Failed to auto-assign: ' + result.message)
+        }
       }
     } catch (err) {
       setError('Error during auto-assignment: ' + err.message)
