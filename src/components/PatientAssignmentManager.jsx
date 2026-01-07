@@ -184,6 +184,14 @@ export default function PatientAssignmentManager({ profile }) {
   async function handleAutoAssign(matchProfessionalId) {
     try {
       setAiLoading(true)
+      if (!selectedPatient) {
+        setError('No patient selected')
+        return
+      }
+      if (!profile || !profile.id) {
+        setError('Coordinator profile not loaded yet. Please wait a moment and try again.')
+        return
+      }
       const result = await autoAssignPatient(selectedPatient.id, profile.id)
       
       if (result.success) {
@@ -216,6 +224,11 @@ export default function PatientAssignmentManager({ profile }) {
   async function handleBulkAutoAssign() {
     if (unassignedPatients.length === 0) {
       setError('No unassigned patients to auto-assign')
+      return
+    }
+
+    if (!profile || !profile.id) {
+      setError('Coordinator profile not loaded yet. Please wait a moment and try again.')
       return
     }
 
