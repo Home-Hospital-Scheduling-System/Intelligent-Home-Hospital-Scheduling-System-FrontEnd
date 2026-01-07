@@ -132,7 +132,8 @@ export default function SupervisorDashboard({ profile }) {
     setSelectedProfessional(pro)
     setWhMessage({ error: '', success: '' })
     setWhForm({ weekday: '1', start_time: '09:00', end_time: '17:00', isRecurring: true })
-    fetchWorkingHours(pro.id)
+    // Use profile_id (UUID) for working-hours endpoint
+    fetchWorkingHours(pro.profile_id)
   }
 
   function handleWhFormChange(e) {
