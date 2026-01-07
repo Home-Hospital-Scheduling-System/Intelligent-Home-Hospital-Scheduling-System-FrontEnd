@@ -106,17 +106,12 @@ export default function SupervisorDashboard({ profile }) {
   }
 
   async function fetchWorkingHours(professionalId) {
-    const { data, error } = await supabase
-      .from('working_hours')
-      .select('*')
-      .eq('professional_id', professionalId)
-      .order('weekday', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching working hours:', error)
-      setWorkingHours([])
-    } else {
+    try {
+      const data = await apiGet(`/api/professionals/${professionalId}/working-hours`)
       setWorkingHours(data || [])
+    } catch (err) {
+      console.error('Error fetching working hours:', err)
+      setWorkingHours([])
     }
   }
 
