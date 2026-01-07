@@ -26,13 +26,13 @@ export default function ProfessionalView({ profile }) {
     try {
       setLoading(true)
       
-      // Fetch professional details from backend
+      // Fetch professional details from backend using profile_id (UUID)
       const data = await apiGet(`/api/professionals/${profile.id}`)
       setProfessionalData(data)
       // Fetch patients associated with this professional
       fetchPatients(data.id)
-      // Fetch working hours
-      fetchWorkingHours(data.id)
+      // Fetch working hours using profile_id (UUID)
+      fetchWorkingHours(profile.id)
     } catch (err) {
       console.error('Error fetching professional data:', err)
     } finally {
