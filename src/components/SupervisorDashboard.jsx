@@ -82,7 +82,7 @@ export default function SupervisorDashboard({ profile }) {
       setProfessionals(data || [])
       // Fetch working hours for all professionals
       if (data && data.length > 0) {
-        fetchAllWorkingHours(data.map(p => p.id))
+        fetchAllWorkingHours(data.map(p => p.profile_id))
       }
     } catch (err) {
       console.error('Error fetching professionals:', err)
@@ -185,9 +185,9 @@ export default function SupervisorDashboard({ profile }) {
     try {
       await apiPut(`/api/professionals/${selectedProfessional.id}/working-hours`, { working_hours: [payload] })
       setWhMessage({ error: '', success: 'Working hours saved' })
-      fetchWorkingHours(selectedProfessional.id)
+      fetchWorkingHours(selectedProfessional.profile_id)
       // Refresh all working hours for the list view
-      fetchAllWorkingHours(professionals.map(p => p.id))
+      fetchAllWorkingHours(professionals.map(p => p.profile_id))
     } catch (error) {
       setWhMessage({ error: error.message, success: '' })
     }
@@ -207,9 +207,9 @@ export default function SupervisorDashboard({ profile }) {
     try {
       await apiDelete(`/api/professionals/${selectedProfessional.id}/working-hours/${confirmModal.workingHourId}`)
       setWhMessage({ error: '', success: 'Time slot deleted' })
-      fetchWorkingHours(selectedProfessional.id)
+      fetchWorkingHours(selectedProfessional.profile_id)
       // Refresh all working hours for the list view
-      fetchAllWorkingHours(professionals.map(p => p.id))
+      fetchAllWorkingHours(professionals.map(p => p.profile_id))
     } catch (error) {
       setWhMessage({ error: 'Failed to delete: ' + error.message, success: '' })
     }
@@ -519,7 +519,7 @@ export default function SupervisorDashboard({ profile }) {
                   <p style={{ padding: '1rem', color: '#475569' }}>No professionals found.</p>
                 ) : (
                   professionals.map(pro => {
-                    const proHours = allWorkingHours[pro.id] || []
+                    const proHours = allWorkingHours[pro.profile_id] || []
                     const totalHours = calculateTotalHours(proHours)
                     return (
                       <div
