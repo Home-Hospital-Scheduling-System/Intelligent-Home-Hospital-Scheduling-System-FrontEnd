@@ -183,7 +183,7 @@ export default function SupervisorDashboard({ profile }) {
     }
 
     try {
-      await apiPut(`/api/professionals/${selectedProfessional.id}/working-hours`, { working_hours: [payload] })
+      await apiPut(`/api/professionals/${selectedProfessional.profile_id}/working-hours`, { working_hours: [payload] })
       setWhMessage({ error: '', success: 'Working hours saved' })
       fetchWorkingHours(selectedProfessional.profile_id)
       // Refresh all working hours for the list view
@@ -205,7 +205,7 @@ export default function SupervisorDashboard({ profile }) {
     setConfirmModal({ show: false, workingHourId: null })
 
     try {
-      await apiDelete(`/api/professionals/${selectedProfessional.id}/working-hours/${confirmModal.workingHourId}`)
+      await apiDelete(`/api/professionals/${selectedProfessional.profile_id}/working-hours/${confirmModal.workingHourId}`)
       setWhMessage({ error: '', success: 'Time slot deleted' })
       fetchWorkingHours(selectedProfessional.profile_id)
       // Refresh all working hours for the list view
