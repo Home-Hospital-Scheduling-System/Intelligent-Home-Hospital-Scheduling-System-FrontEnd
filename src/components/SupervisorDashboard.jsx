@@ -103,15 +103,6 @@ export default function SupervisorDashboard({ profile }) {
       console.error('Error fetching all working hours:', err)
       setAllWorkingHours({})
     }
-      const grouped = {}
-      data?.forEach(wh => {
-        if (!grouped[wh.professional_id]) {
-          grouped[wh.professional_id] = []
-        }
-        grouped[wh.professional_id].push(wh)
-      })
-      setAllWorkingHours(grouped)
-    }
   }
 
   async function fetchWorkingHours(professionalId) {
