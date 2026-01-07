@@ -92,13 +92,9 @@ export default function SupervisorDashboard({ profile }) {
 
   async function fetchAllWorkingHours(professionalIds) {
     try {
-      const allHours = {}
-      // Fetch working hours for each professional
-      for (const profId of professionalIds) {
-        const data = await apiGet(`/api/professionals/${profId}/working-hours`)
-        allHours[profId] = data || []
-      }
-      setAllWorkingHours(allHours)
+      const qs = professionalIds.join(',')
+      const data = await apiGet(`/api/professionals/working-hours/bulk?profile_ids=${qs}`)
+      setAllWorkingHours(data || {})
     } catch (err) {
       console.error('Error fetching all working hours:', err)
       setAllWorkingHours({})
@@ -108,7 +104,10 @@ export default function SupervisorDashboard({ profile }) {
   async function fetchWorkingHours(professionalId) {
     try {
       const data = await apiGet(`/api/professionals/${professionalId}/working-hours`)
-      setWorkingHours(data || [])
+      const rows = data || []
+      setWorkingHours(rows)
+      // Keep cache in sync
+      setAllWorkingHours(prev => ({ ...prev, [professionalId]: rows }))
     } catch (err) {
       console.error('Error fetching working hours:', err)
       setWorkingHours([])
@@ -181,9 +180,8 @@ export default function SupervisorDashboard({ profile }) {
     try {
       await apiPut(`/api/professionals/${selectedProfessional.profile_id}/working-hours`, { working_hours: [payload] })
       setWhMessage({ error: '', success: 'Working hours saved' })
-      fetchWorkingHours(selectedProfessional.profile_id)
-      // Refresh all working hours for the list view
-      fetchAllWorkingHours(professionals.map(p => p.profile_id))
+      // Refresh only the selected professional
+      await fetchWorkingHours(selectedProfessional.profile_id)
     } catch (error) {
       setWhMessage({ error: error.message, success: '' })
     }
@@ -203,9 +201,8 @@ export default function SupervisorDashboard({ profile }) {
     try {
       await apiDelete(`/api/professionals/${selectedProfessional.profile_id}/working-hours/${confirmModal.workingHourId}`)
       setWhMessage({ error: '', success: 'Time slot deleted' })
-      fetchWorkingHours(selectedProfessional.profile_id)
-      // Refresh all working hours for the list view
-      fetchAllWorkingHours(professionals.map(p => p.profile_id))
+      // Refresh only the selected professional
+      await fetchWorkingHours(selectedProfessional.profile_id)
     } catch (error) {
       setWhMessage({ error: 'Failed to delete: ' + error.message, success: '' })
     }
