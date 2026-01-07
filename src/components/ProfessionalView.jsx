@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { apiGet } from '../lib/apiClient'
 import AddPatient from './AddPatient'
 import UpdatePatient from './UpdatePatient'
 
@@ -25,24 +26,15 @@ export default function ProfessionalView({ profile }) {
     try {
       setLoading(true)
       
-      // Fetch professional details
-      const { data, error } = await supabase
-        .from('professionals')
-        .select('*')
-        .eq('profile_id', profile.id)
-        .single()
-
-      if (error) {
-        console.error('Error fetching professional data:', error)
-      } else {
-        setProfessionalData(data)
-        // Fetch patients associated with this professional
-        fetchPatients(data.id)
-        // Fetch working hours
-        fetchWorkingHours(data.id)
-      }
+      // Fetch professional details from backend
+      const data = await apiGet(`/api/professionals/${profile.id}`)
+      setProfessionalData(data)
+      // Fetch patients associated with this professional
+      fetchPatients(data.id)
+      // Fetch working hours
+      fetchWorkingHours(data.id)
     } catch (err) {
-      console.error('Unexpected error:', err)
+      console.error('Error fetching professional data:', err)
     } finally {
       setLoading(false)
     }
@@ -50,20 +42,11 @@ export default function ProfessionalView({ profile }) {
 
   async function fetchWorkingHours(professionalId) {
     try {
-      const { data, error } = await supabase
-        .from('working_hours')
-        .select('*')
-        .eq('professional_id', professionalId)
-        .order('weekday', { ascending: true })
-
-      if (error) {
-        console.error('Error fetching working hours:', error)
-        setWorkingHours([])
-      } else {
-        setWorkingHours(data || [])
-      }
+      const data = await apiGet(`/api/professionals/${professionalId}/working-hours`)
+      setWorkingHours(data)
     } catch (err) {
-      console.error('Unexpected error fetching working hours:', err)
+      console.error('Error fetching working hours:', err)
+      setWorkingHours([])
     }
   }
 

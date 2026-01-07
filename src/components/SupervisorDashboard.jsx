@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { apiGet, apiPut, apiDelete } from '../lib/apiClient'
 
 export default function SupervisorDashboard({ profile }) {
   const [stats, setStats] = useState({
@@ -32,52 +33,39 @@ export default function SupervisorDashboard({ profile }) {
     try {
       setLoading(true)
 
-      // Fetch all patients
-      const { data: patientsData, error: patientsError } = await supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false })
+      // Fetch all patients via backend
+      const patientsData = await apiGet('/api/patients')
+      setAllPatients(patientsData || [])
 
-      if (patientsError) {
-        console.error('Error fetching patients:', patientsError)
-      } else {
-        setAllPatients(patientsData || [])
+      // Calculate statistics
+      const totalPatients = patientsData?.length || 0
+      const patientsByArea = {}
+      const patientsByCare = {}
 
-        // Calculate statistics
-        const totalPatients = patientsData?.length || 0
-        const patientsByArea = {}
-        const patientsByCare = {}
+      patientsData?.forEach(patient => {
+        // Count by area
+        if (patient.area) {
+          patientsByArea[patient.area] = (patientsByArea[patient.area] || 0) + 1
+        }
+        // Count by care needed
+        if (patient.care_needed) {
+          patientsByCare[patient.care_needed] = (patientsByCare[patient.care_needed] || 0) + 1
+        }
+      })
 
-        patientsData?.forEach(patient => {
-          // Count by area
-          if (patient.area) {
-            patientsByArea[patient.area] = (patientsByArea[patient.area] || 0) + 1
-          }
-          // Count by care needed
-          if (patient.care_needed) {
-            patientsByCare[patient.care_needed] = (patientsByCare[patient.care_needed] || 0) + 1
-          }
-        })
+      setStats({
+        totalPatients,
+        patientsByArea,
+        patientsByCare,
+        professionalCount: 0
+      })
 
-        setStats({
-          totalPatients,
-          patientsByArea,
-          patientsByCare,
-          professionalCount: 0
-        })
-      }
-
-      // Fetch professional count
-      const { data: professionalsData, error: profError } = await supabase
-        .from('professionals')
-        .select('id')
-
-      if (!profError) {
-        setStats(prev => ({
-          ...prev,
-          professionalCount: professionalsData?.length || 0
-        }))
-      }
+      // Fetch professional count via backend
+      const professionalsData = await apiGet('/api/professionals')
+      setStats(prev => ({
+        ...prev,
+        professionalCount: professionalsData?.length || 0
+      }))
 
       // Preload professionals for the modal
       await fetchProfessionals()
@@ -89,34 +77,32 @@ export default function SupervisorDashboard({ profile }) {
   }
 
   async function fetchProfessionals() {
-    const { data, error } = await supabase
-      .from('professionals')
-      .select('id, kind, specialty, license_number, profile_id, profiles(full_name, role)')
-      .order('id')
-
-    if (error) {
-      console.error('Error fetching professionals:', error)
-      setProfessionals([])
-    } else {
+    try {
+      const data = await apiGet('/api/professionals')
       setProfessionals(data || [])
       // Fetch working hours for all professionals
       if (data && data.length > 0) {
         fetchAllWorkingHours(data.map(p => p.id))
       }
+    } catch (err) {
+      console.error('Error fetching professionals:', err)
+      setProfessionals([])
     }
   }
 
   async function fetchAllWorkingHours(professionalIds) {
-    const { data, error } = await supabase
-      .from('working_hours')
-      .select('*')
-      .in('professional_id', professionalIds)
-
-    if (error) {
-      console.error('Error fetching all working hours:', error)
+    try {
+      const allHours = {}
+      // Fetch working hours for each professional
+      for (const profId of professionalIds) {
+        const data = await apiGet(`/api/professionals/${profId}/working-hours`)
+        allHours[profId] = data || []
+      }
+      setAllWorkingHours(allHours)
+    } catch (err) {
+      console.error('Error fetching all working hours:', err)
       setAllWorkingHours({})
-    } else {
-      // Group by professional_id
+    }
       const grouped = {}
       data?.forEach(wh => {
         if (!grouped[wh.professional_id]) {
@@ -205,17 +191,14 @@ export default function SupervisorDashboard({ profile }) {
       payload.id = existing.id
     }
 
-    const { error } = await supabase
-      .from('working_hours')
-      .upsert([payload], { onConflict: 'professional_id,weekday' })
-
-    if (error) {
-      setWhMessage({ error: error.message, success: '' })
-    } else {
+    try {
+      await apiPut(`/api/professionals/${selectedProfessional.id}/working-hours`, { working_hours: [payload] })
       setWhMessage({ error: '', success: 'Working hours saved' })
       fetchWorkingHours(selectedProfessional.id)
       // Refresh all working hours for the list view
       fetchAllWorkingHours(professionals.map(p => p.id))
+    } catch (error) {
+      setWhMessage({ error: error.message, success: '' })
     }
 
     setWhSaving(false)
@@ -230,18 +213,14 @@ export default function SupervisorDashboard({ profile }) {
     if (!confirmModal.workingHourId) return
     setConfirmModal({ show: false, workingHourId: null })
 
-    const { error } = await supabase
-      .from('working_hours')
-      .delete()
-      .eq('id', confirmModal.workingHourId)
-
-    if (error) {
-      setWhMessage({ error: 'Failed to delete: ' + error.message, success: '' })
-    } else {
+    try {
+      await apiDelete(`/api/professionals/${selectedProfessional.id}/working-hours/${confirmModal.workingHourId}`)
       setWhMessage({ error: '', success: 'Time slot deleted' })
       fetchWorkingHours(selectedProfessional.id)
       // Refresh all working hours for the list view
       fetchAllWorkingHours(professionals.map(p => p.id))
+    } catch (error) {
+      setWhMessage({ error: 'Failed to delete: ' + error.message, success: '' })
     }
   }
 
