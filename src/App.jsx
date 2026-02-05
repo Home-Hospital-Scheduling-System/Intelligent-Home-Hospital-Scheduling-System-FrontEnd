@@ -120,7 +120,7 @@ function AppContent() {
     <div className="app-container">
       <main className="hero">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1>AI Powered Home Hospital Scheduling System</h1>
+          <h1>Intelligent Home Hospital Scheduling System</h1>
           {session && (
             <button onClick={handleSignOut} style={{ marginLeft: 12 }}>Sign out</button>
           )}
