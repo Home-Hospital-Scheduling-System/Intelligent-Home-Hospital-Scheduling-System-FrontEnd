@@ -1,4 +1,4 @@
-# AI Powered Home Hospital Scheduling System — Frontend (Vite + React)
+# Intelligent Home Hospital Scheduling System — Frontend (Vite + React)
 
 This folder contains a minimal Vite + React scaffold for the Thesis project landing page.
 
@@ -11,13 +11,13 @@ https://home-hospital-scheduling-system.netlify.app/
 
 (Note: this is a public deployment of the current frontend; it reads from the Supabase project configured by the environment variables.)
 
-# AI Powered Home Hospital Scheduling System — Frontend (Vite + React)
+# Intelligent Home Hospital Scheduling System — Frontend (Vite + React)
 
 This folder contains a minimal Vite + React scaffold for the Thesis project landing page. It is prepared to connect to Supabase.
 
 What I created
 - Clean, minimal project structure inside this folder.
-- Landing page that displays: "AI Powered Home Hospital Scheduling System".
+- Landing page that displays: "Intelligent Home Hospital Scheduling System".
 - `.env.example` with placeholders for Supabase keys.
 - Supabase wiring: `src/lib/supabaseClient.js` and an example component `src/components/PatientsList.jsx` that reads from a `patients` table.
 
